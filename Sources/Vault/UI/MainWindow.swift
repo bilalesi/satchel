@@ -75,6 +75,7 @@ struct MainWindow: View {
 
 struct Sidebar: View {
     @EnvironmentObject var session: VaultSession
+    @EnvironmentObject var sync: SyncCoordinator
     @Binding var selection: SidebarSelection?
 
     var tags: [String] {
@@ -111,8 +112,11 @@ struct Sidebar: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppIdentity.name).font(.system(size: 12, weight: .semibold))
-                    Text(session.touchIDEnabled ? "Touch ID on" : "Password only")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    HStack(spacing: 5) {
+                        Circle().fill(syncColor).frame(width: 6, height: 6)
+                        Text(syncText).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    .help(syncHelp)
                 }
                 Spacer()
                 SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.plain).foregroundStyle(.secondary)
@@ -120,6 +124,31 @@ struct Sidebar: View {
             .padding(12)
         }
         .navigationSplitViewColumnWidth(min: 200, ideal: 220)
+    }
+
+    private var syncColor: Color {
+        switch sync.status {
+        case .off: return .gray.opacity(0.5)
+        case .idle: return .green
+        case .syncing: return .blue
+        case .error: return .red
+        }
+    }
+
+    private var syncText: String {
+        switch sync.status {
+        case .off: return session.touchIDEnabled ? "Touch ID on · no sync" : "No sync"
+        case .idle:
+            if let d = sync.lastSyncAt { return "Synced " + d.formatted(.relative(presentation: .named)) }
+            return "Sync ready"
+        case .syncing: return "Syncing…"
+        case .error: return "Sync error"
+        }
+    }
+
+    private var syncHelp: String {
+        if case .error(let m) = sync.status { return m }
+        return sync.config.displayName
     }
 
     private func row(_ sel: SidebarSelection, _ title: String, _ symbol: String, _ tint: ItemType, _ n: Int?) -> some View {

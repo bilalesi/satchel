@@ -77,6 +77,9 @@ struct SettingsView: View {
                     Text("Unlock the vault to change this.").foregroundStyle(.secondary)
                 }
             }
+            Section("Sync") {
+                SyncSettings()
+            }
             Section("Vault") {
                 LabeledContent("Location", value: session.vaultURL.path)
                 Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([session.vaultURL]) }
@@ -85,7 +88,7 @@ struct SettingsView: View {
             if let err = session.lastError { Text(err).foregroundStyle(.red) }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 560)
+        .frame(width: 520, height: 680)
         .excludedFromCapture()
     }
 }

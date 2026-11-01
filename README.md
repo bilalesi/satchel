@@ -36,9 +36,24 @@ The vault lives in `~/Library/Application Support/Vault/default.vault/`. The who
 - `manifest.vman` lists every item version with a monotonic generation and is MAC'd with a key only the unlocked vault has. A file restored to an older version, a missing file, or an edited header is reported instead of trusted.
 - Writes are atomic (temp file + rename). A crash between an item write and the manifest write is repaired on the next unlock.
 
+## Sync
+
+Settings → Sync. Two backends:
+
+- **GitHub private repository.** Create an empty private repo. Create a fine-grained personal access token (github.com → Settings → Developer settings → Fine-grained tokens) limited to that repository with **Contents: Read and write**. Enter owner, repository, branch and the token, click **Test connection**, then **Save**. The token is stored in the login Keychain, never in a file.
+- **Folder.** Any synced directory (iCloud Drive, Dropbox, a network share).
+
+What happens: after every change (2 s debounce), on unlock, every 15 minutes and when the network comes back, the vault directory is mirrored to the remote. Each item is one encrypted file; only files whose git blob id differs are transferred. The manifest is written last with a compare-and-swap, so two Macs editing at the same time never overwrite each other: the second one retries, merges per item, and if both edited the same item the newer value wins and the other value lands in that item's history with a `conflict` tag.
+
+What is uploaded: `vault.vhdr` (KDF parameters, password-wrapped key), `manifest.vman`, `items/*.vitem`. All ciphertext. What is **not** uploaded: `touchid.slot` (Secure Enclave key, useless off this Mac) and `sync.json`.
+
+**Second Mac:** install the app, and on the first screen choose **Connect an existing vault from GitHub or a folder…**, enter the same remote and the master password. The vault is downloaded, verified against its manifest, and unlocked. Enable Touch ID again on that Mac.
+
+If the remote ever serves an older manifest than this Mac last saw (a restored backup, a malicious host), sync stops with a rollback error instead of silently reverting items.
+
 ## Not yet built
 
-Sync (GitHub first), the browser extension (Dia, Firefox), the Safari credential provider, auto-type into other apps. See phases 2–5 in the investigation document.
+The browser extension (Dia, Firefox), the Safari credential provider, auto-type into other apps, S3 backend. See phases 3–5 in the investigation document.
 
 ## Touch ID and rebuilds
 

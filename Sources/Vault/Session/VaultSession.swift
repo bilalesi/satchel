@@ -21,6 +21,7 @@ final class VaultSession: ObservableObject {
     private var index = SearchIndex([])
     private var autoLock: AutoLock?
     let vaultURL: URL
+    let sync = SyncCoordinator()
 
     var touchIDAvailable: Bool { SecureEnclaveSlot.isAvailable }
 
@@ -39,6 +40,26 @@ final class VaultSession: ObservableObject {
         }
         autoLock = AutoLock(idleSeconds: { TimeInterval(AppSettings.autoLockMinutes * 60) },
                             onLock: { [weak self] in self?.lock() })
+        sync.attach(session: self)
+    }
+
+    /// Second Mac: pull the vault from the remote, then unlock it with the shared password.
+    func connectExisting(config: RemoteConfig, password: String) async -> Bool {
+        var ok = false
+        await run {
+            let remote = try config.makeStore()
+            let pw = SecureBytes(utf8: password)
+            let url = self.vaultURL
+            let s = try await Task.detached(priority: .userInitiated) {
+                try await SyncEngine.bootstrap(remote: remote, into: url, password: pw)
+            }.value
+            self.store = s
+            self.touchIDEnabled = false
+            try self.finishUnlock()
+            self.sync.config = config
+            ok = true
+        }
+        return ok
     }
 
     // MARK: Lock / unlock
@@ -99,6 +120,7 @@ final class VaultSession: ObservableObject {
     private func finishUnlock() throws {
         state = .unlocked
         try reload()
+        sync.requestSync(reason: "unlock", delay: 0)
     }
 
     func reload() throws {
@@ -158,13 +180,13 @@ final class VaultSession: ObservableObject {
 
     func save(_ overview: ItemOverview, _ details: ItemDetails) {
         guard let store else { return }
-        do { try store.save(overview: overview, details: details); try reload() }
+        do { try store.save(overview: overview, details: details); try reload(); sync.requestSync(reason: "save") }
         catch { lastError = error.localizedDescription }
     }
 
     func delete(_ id: UUID) {
         guard let store else { return }
-        do { try store.delete(id: id); try reload() }
+        do { try store.delete(id: id); try reload(); sync.requestSync(reason: "delete") }
         catch { lastError = error.localizedDescription }
     }
 

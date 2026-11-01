@@ -16,7 +16,7 @@ struct VaultApp: App {
 
     var body: some Scene {
         Window(AppIdentity.name, id: "main") {
-            MainWindow().environmentObject(session)
+            MainWindow().environmentObject(session).environmentObject(session.sync)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1040, height: 680)
@@ -29,13 +29,15 @@ struct VaultApp: App {
         }
 
         Settings {
-            SettingsView().environmentObject(session)
+            SettingsView().environmentObject(session).environmentObject(session.sync)
         }
 
         MenuBarExtra {
             Button("Quick Access  ⌥ Space") { QuickAccessController.shared.toggle() }
             Button(session.state == .unlocked ? "Lock now" : "Locked") { session.lock() }
                 .disabled(session.state != .unlocked)
+            Button("Sync now") { Task { await session.sync.syncNow() } }
+                .disabled(session.state != .unlocked || !session.sync.isConfigured)
             Divider()
             Button("Open \(AppIdentity.name)") { AppDelegate.openMainWindow() }
             SettingsLink { Text("Settings…") }

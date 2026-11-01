@@ -4,6 +4,7 @@ import VaultCore
 /// Home screen: Pulse-style cards with one big number each.
 struct OverviewCards: View {
     @EnvironmentObject var session: VaultSession
+    @EnvironmentObject var sync: SyncCoordinator
 
     private let columns = [GridItem(.adaptive(minimum: 220), spacing: 14)]
 
@@ -24,6 +25,12 @@ struct OverviewCards: View {
                              value: "\(stale.count)", unit: "older than 180 days",
                              facts: [("Oldest", oldestLabel), ("Rotate soon", "\(stale.prefix(3).map(\.title).joined(separator: ", "))")],
                              series: ageBuckets)
+                    StatCard(title: "Sync", symbol: "arrow.triangle.2.circlepath", color: Theme.accent(.webhook),
+                             value: syncValue, unit: syncUnit,
+                             facts: [("Remote", sync.config.displayName),
+                                     ("Generation", "\(session.store?.manifest.generation ?? 0)"),
+                                     ("Last run", lastRun)],
+                             series: [])
                     StatCard(title: "Security", symbol: "lock.shield", color: Theme.accent(.login),
                              value: session.touchIDEnabled ? "On" : "Off", unit: "Touch ID",
                              facts: [("Auto-lock", "\(AppSettings.autoLockMinutes) min"),
@@ -44,6 +51,25 @@ struct OverviewCards: View {
             .padding(20)
         }
         .background(Theme.canvas)
+    }
+
+    private var syncValue: String {
+        switch sync.status {
+        case .off: return "Off"
+        case .idle: return sync.lastSyncAt.map { $0.formatted(.relative(presentation: .numeric)) } ?? "Ready"
+        case .syncing: return "…"
+        case .error: return "Error"
+        }
+    }
+
+    private var syncUnit: String {
+        if case .error(let m) = sync.status { return m }
+        return sync.lastSyncAt == nil ? "" : "ago"
+    }
+
+    private var lastRun: String {
+        guard let r = sync.lastReport else { return "–" }
+        return "↓\(r.pulled) ↑\(r.pushed)" + (r.conflicts > 0 ? " ⚠︎\(r.conflicts)" : "")
     }
 
     private var stale: [ItemOverview] {

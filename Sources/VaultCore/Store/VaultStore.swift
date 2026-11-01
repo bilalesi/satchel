@@ -17,6 +17,10 @@ public final class VaultStore: @unchecked Sendable {
     private var keys: VaultKeys?
     private var vaultKey: SecureBytes?
     private let deviceID: UUID
+    /// Serialises the UI (saves) and the sync engine (pulls/pushes) on the same files.
+    /// Reason: both touch items + manifest; a recursive lock is the smallest thing that
+    /// keeps each public operation atomic on disk. Held for milliseconds (no network inside).
+    private let mutex = NSRecursiveLock()
     /// Device-bound Touch ID slot, stored in `touchid.slot`, never synced.
     private var touchIDSlot: KeySlot?
 
@@ -86,6 +90,7 @@ public final class VaultStore: @unchecked Sendable {
     }
 
     public func unlock(vaultKey vk: SecureBytes) throws {
+        mutex.lock(); defer { mutex.unlock() }
         guard vk.count == VaultKey.byteCount else { throw VaultError.authenticationFailed }
         let candidate = VaultKeys(vaultKey: vk)
         // Verify the manifest before accepting the key: a wrong key fails here, and a
@@ -113,6 +118,7 @@ public final class VaultStore: @unchecked Sendable {
     }
 
     public func lock() {
+        mutex.lock(); defer { mutex.unlock() }
         keys?.wipe()
         vaultKey?.wipe()
         keys = nil
@@ -131,6 +137,7 @@ public final class VaultStore: @unchecked Sendable {
 
     /// Runs `body` with the raw vault key (needed to wrap it into a new slot).
     public func withVaultKey<R>(_ body: (SecureBytes) throws -> R) throws -> R {
+        mutex.lock(); defer { mutex.unlock() }
         guard let vaultKey else { throw VaultError.locked }
         return try body(vaultKey)
     }
@@ -151,6 +158,7 @@ public final class VaultStore: @unchecked Sendable {
     /// Reason: one small read per file (header + overview box, a few hundred bytes); the
     /// details box is never touched here.
     public func loadOverviews() throws -> LoadResult {
+        mutex.lock(); defer { mutex.unlock() }
         let keys = try requireKeys()
         let fm = FileManager.default
         let names: [String]
@@ -191,6 +199,7 @@ public final class VaultStore: @unchecked Sendable {
     }
 
     public func details(for id: UUID) throws -> ItemDetails {
+        mutex.lock(); defer { mutex.unlock() }
         let keys = try requireKeys()
         do { return try ItemFile.decodeDetails(try AtomicFile.read(itemURL(id)), keys: keys) }
         catch VaultError.corruptItemData { throw VaultError.corruptItem(id) }
@@ -200,6 +209,7 @@ public final class VaultStore: @unchecked Sendable {
     /// Writes a new version of the item. Secret fields that changed are recorded in history.
     @discardableResult
     public func save(overview: ItemOverview, details: ItemDetails) throws -> ItemOverview {
+        mutex.lock(); defer { mutex.unlock() }
         let keys = try requireKeys()
         var next = overview
         next.updatedAt = Date().millisecondPrecision
@@ -218,6 +228,7 @@ public final class VaultStore: @unchecked Sendable {
 
     /// Replaces the item with a tombstone (overview kept for display, details dropped).
     public func delete(id: UUID) throws {
+        mutex.lock(); defer { mutex.unlock() }
         let keys = try requireKeys()
         let url = itemURL(id)
         var overview: ItemOverview
@@ -237,12 +248,14 @@ public final class VaultStore: @unchecked Sendable {
     // MARK: Key slots
 
     public func addSecureEnclaveSlot(_ slot: KeySlot) throws {
+        mutex.lock(); defer { mutex.unlock() }
         guard slot.isSecureEnclave else { throw VaultError.cryptoFailure }
         _ = try requireKeys()
         try writeTouchIDSlot(slot)
     }
 
     public func removeSecureEnclaveSlots() throws {
+        mutex.lock(); defer { mutex.unlock() }
         touchIDSlot = nil
         do { try FileManager.default.removeItem(at: touchIDSlotURL) } catch CocoaError.fileNoSuchFile {
         } catch let e as NSError where e.code == NSFileNoSuchFileError {
@@ -255,6 +268,7 @@ public final class VaultStore: @unchecked Sendable {
     }
 
     public func changePassword(old: SecureBytes, new: SecureBytes, kdfParams: KDFParams = .fresh()) throws {
+        mutex.lock(); defer { mutex.unlock() }
         guard let vaultKey else { throw VaultError.locked }
         guard let idx = header.slots.firstIndex(where: { $0.isPassword }) else { throw VaultError.corruptHeader }
         guard try header.slots[idx].unwrap(password: old) == vaultKey else { throw VaultError.authenticationFailed }
@@ -269,12 +283,14 @@ public final class VaultStore: @unchecked Sendable {
     private var syncStateURL: URL { url.appendingPathComponent(SyncState.fileName) }
 
     public var syncState: SyncState {
+        mutex.lock(); defer { mutex.unlock() }
         guard let data = try? Data(contentsOf: syncStateURL),
               let s = try? JSONCoding.decoder.decode(SyncState.self, from: data) else { return SyncState() }
         return s
     }
 
     public func saveSyncState(_ state: SyncState) throws {
+        mutex.lock(); defer { mutex.unlock() }
         try AtomicFile.write(try JSONCoding.encoder.encode(state), to: syncStateURL)
     }
 
@@ -283,12 +299,14 @@ public final class VaultStore: @unchecked Sendable {
     public func manifestData() throws -> Data { try AtomicFile.read(manifestURL) }
 
     public func itemData(_ id: UUID) throws -> Data? {
+        mutex.lock(); defer { mutex.unlock() }
         let u = itemURL(id)
         guard FileManager.default.fileExists(atPath: u.path) else { return nil }
         return try AtomicFile.read(u)
     }
 
     public func itemIDsOnDisk() throws -> [UUID] {
+        mutex.lock(); defer { mutex.unlock() }
         do {
             return try FileManager.default.contentsOfDirectory(atPath: itemsURL.path)
                 .filter { $0.hasSuffix("." + ItemFile.fileExtension) && !$0.hasPrefix(".") }
@@ -297,22 +315,26 @@ public final class VaultStore: @unchecked Sendable {
     }
 
     public func decodeRemoteManifest(_ data: Data) throws -> Manifest {
-        try ManifestFile.decode(data, key: try requireKeys().manifest)
+        mutex.lock(); defer { mutex.unlock() }
+        return try ManifestFile.decode(data, key: try requireKeys().manifest)
     }
 
     public func encodeManifest(_ m: Manifest) throws -> Data {
-        try ManifestFile.encode(m, key: try requireKeys().manifest)
+        mutex.lock(); defer { mutex.unlock() }
+        return try ManifestFile.encode(m, key: try requireKeys().manifest)
     }
 
     /// Proves remote bytes belong to this vault (overview box opens with our key) and are
     /// internally consistent. Throws `corruptItemData` or `authenticationFailed`.
     @discardableResult
     public func verifyRemoteItem(_ data: Data) throws -> ItemFileHeader {
-        try ItemFile.decodeOverview(data, keys: try requireKeys()).header
+        mutex.lock(); defer { mutex.unlock() }
+        return try ItemFile.decodeOverview(data, keys: try requireKeys()).header
     }
 
     /// Stores verified remote bytes as-is (no re-encryption). Does not touch the manifest.
     public func writeRawItem(_ data: Data) throws {
+        mutex.lock(); defer { mutex.unlock() }
         let header = try verifyRemoteItem(data)
         try AtomicFile.write(data, to: itemURL(header.id))
     }
@@ -321,6 +343,7 @@ public final class VaultStore: @unchecked Sendable {
     /// go into history (deduplicated, capped); the winner is tagged `conflict`.
     /// Deterministic given the same inputs, so both devices converge.
     public func mergeConflict(local: Data, remote: Data) throws -> Data {
+        mutex.lock(); defer { mutex.unlock() }
         let keys = try requireKeys()
         let l = try ItemFile.decodeOverview(local, keys: keys)
         let r = try ItemFile.decodeOverview(remote, keys: keys)
@@ -353,6 +376,7 @@ public final class VaultStore: @unchecked Sendable {
 
     /// Replaces the local manifest with a merged one (no generation bump; the engine set it).
     public func replaceManifest(_ m: Manifest) throws {
+        mutex.lock(); defer { mutex.unlock() }
         let keys = try requireKeys()
         var next = m
         next.deviceID = deviceID
@@ -362,6 +386,7 @@ public final class VaultStore: @unchecked Sendable {
 
     /// Accepts a header from the remote (already proven by the remote manifest's MAC).
     public func applyRemoteHeader(_ data: Data) throws {
+        mutex.lock(); defer { mutex.unlock() }
         _ = try requireKeys()
         var h = try VaultHeader.decode(data)
         h.slots.removeAll { !$0.isPassword }

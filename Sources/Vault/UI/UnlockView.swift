@@ -7,6 +7,7 @@ struct UnlockView: View {
     @State private var password = ""
     @State private var confirm = ""
     @State private var triedBiometrics = false
+    @State private var connecting = false
     @FocusState private var focused: Bool
 
     var creating: Bool { session.state == .noVault }
@@ -55,6 +56,10 @@ struct UnlockView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(session.busy || !valid)
                 }
+                if creating {
+                    Button("Connect an existing vault from GitHub or a folder…") { connecting = true }
+                        .buttonStyle(.link).font(.callout)
+                }
                 if session.busy { ProgressView().controlSize(.small) }
                 if let err = session.lastError {
                     Text(err).font(.callout).foregroundStyle(.red).frame(width: 320)
@@ -63,6 +68,7 @@ struct UnlockView: View {
             .padding(40)
         }
         .excludedFromCapture()
+        .sheet(isPresented: $connecting) { ConnectVaultView() }
         .onAppear {
             focused = true
             if !creating && session.touchIDEnabled && !triedBiometrics {
