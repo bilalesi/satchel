@@ -6,6 +6,8 @@ struct SettingsView: View {
     @AppStorage(AppSettings.autoLockMinutesKey) private var autoLock = 10
     @AppStorage(AppSettings.clipboardSecondsKey) private var clipboard = 30
     @AppStorage(AppSettings.hotKeyEnabledKey) private var hotKey = true
+    @AppStorage(AppSettings.autoTypeEnabledKey) private var autoType = false
+    @State private var axTrusted = AutoType.isTrusted
     @State private var touchIDPassword = ""
     @State private var askTouchIDPassword = false
     @State private var oldPassword = ""
@@ -25,6 +27,25 @@ struct SettingsView: View {
                 }
                 Toggle("Quick Access hotkey (⌥ Space)", isOn: $hotKey)
                     .onChange(of: hotKey) { _, on in HotKey.shared.setEnabled(on) }
+                Toggle("Auto-type into other apps (⇧↩ in Quick Access)", isOn: $autoType)
+                    .onChange(of: autoType) { _, on in
+                        if on && !AutoType.isTrusted { AutoType.requestPermission() }
+                        axTrusted = AutoType.isTrusted
+                    }
+                if autoType {
+                    HStack {
+                        Label(axTrusted ? "Accessibility permission granted" : "Accessibility permission missing",
+                              systemImage: axTrusted ? "checkmark.seal.fill" : "exclamationmark.triangle")
+                            .font(.callout).foregroundStyle(axTrusted ? .green : .orange)
+                        Spacer()
+                        Button("Open System Settings") { AutoType.openSystemSettings() }
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                        axTrusted = AutoType.isTrusted
+                    }
+                    Text("Types the secret into the field that was focused in the app in front, through Accessibility first and keystrokes second. Secure keyboard entry (Terminal) blocks keystrokes. After rebuilding the app the permission may need to be granted again.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
             }
             Section("Touch ID") {
                 if !session.touchIDAvailable {

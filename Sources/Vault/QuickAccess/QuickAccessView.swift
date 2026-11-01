@@ -8,6 +8,7 @@ struct QuickAccessView: View {
     @State private var selected: UUID?
     @State private var password = ""
     @State private var copiedTitle: String?
+    @State private var typeError: String?
     @FocusState private var focused: Bool
 
     private var results: [ItemOverview] {
@@ -24,6 +25,7 @@ struct QuickAccessView: View {
         .onReceive(NotificationCenter.default.publisher(for: .quickAccessDidShow)) { _ in
             query = ""
             copiedTitle = nil
+            typeError = nil
             selected = results.first?.id
             focused = true
             if session.state == .locked && session.touchIDEnabled {
@@ -47,7 +49,10 @@ struct QuickAccessView: View {
                     .onKeyPress(.downArrow) { move(1); return .handled }
                     .onKeyPress(.upArrow) { move(-1); return .handled }
                     .onKeyPress(.return, phases: .down) { press in
-                        act(copyUsername: press.modifiers.contains(.command)); return .handled
+                        if press.modifiers.contains(.shift) { typeSelected(field: nil) }
+                        else if press.modifiers.contains(.option) { typeSelected(field: "username") }
+                        else { act(copyUsername: press.modifiers.contains(.command)) }
+                        return .handled
                     }
                 if let app = QuickAccessController.shared.frontmostBundleID {
                     Text(appName(app)).font(.system(size: 11)).foregroundStyle(.secondary)
@@ -68,12 +73,20 @@ struct QuickAccessView: View {
                 .padding(8)
             }
             Divider()
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 hint("↩", "copy \(Theme.label(selectedType.primarySecretField).lowercased())")
                 hint("⌘↩", "copy username")
+                if QuickAccessController.shared.frontmostApp != nil && AppSettings.autoTypeEnabled {
+                    hint("⇧↩", "type into \(appName(QuickAccessController.shared.frontmostBundleID ?? ""))")
+                    hint("⌥↩", "type username")
+                }
                 hint("esc", "close")
                 Spacer()
-                if let copiedTitle { Label("Copied from \(copiedTitle)", systemImage: "checkmark").font(.system(size: 11)).foregroundStyle(.green) }
+                if let typeError {
+                    Label(typeError, systemImage: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(.orange).lineLimit(1)
+                } else if let copiedTitle {
+                    Label("Copied from \(copiedTitle)", systemImage: "checkmark").font(.system(size: 11)).foregroundStyle(.green)
+                }
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
         }
@@ -136,6 +149,20 @@ struct QuickAccessView: View {
         Task {
             try? await Task.sleep(for: .milliseconds(350))
             QuickAccessController.shared.hide()
+        }
+    }
+
+    /// ⇧↩ / ⌥↩: hide the panel so the target app regains focus, then type.
+    private func typeSelected(field: String?) {
+        guard let item = results.first(where: { $0.id == selected }) else { return }
+        let target = QuickAccessController.shared.frontmostApp
+        let fieldName = field ?? item.type.primarySecretField
+        QuickAccessController.shared.hide()
+        Task {
+            if let error = await session.typeField(fieldName, of: item.id, into: target) {
+                typeError = error
+                QuickAccessController.shared.show()
+            }
         }
     }
 

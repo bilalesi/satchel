@@ -7,6 +7,7 @@ enum AppSettings {
     static let clipboardSecondsKey = "clipboardSeconds"
     static let vaultPathKey = "vaultPath"
     static let hotKeyEnabledKey = "hotKeyEnabled"
+    static let autoTypeEnabledKey = "autoTypeEnabled"
 
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
@@ -18,6 +19,7 @@ enum AppSettings {
 
     static var autoLockMinutes: Int { UserDefaults.standard.integer(forKey: autoLockMinutesKey) }
     static var clipboardSeconds: Int { UserDefaults.standard.integer(forKey: clipboardSecondsKey) }
+    static var autoTypeEnabled: Bool { UserDefaults.standard.bool(forKey: autoTypeEnabledKey) }
 
     static var vaultURL: URL {
         if let p = UserDefaults.standard.string(forKey: vaultPathKey), !p.isEmpty {

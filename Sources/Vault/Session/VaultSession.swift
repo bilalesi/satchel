@@ -199,6 +199,25 @@ final class VaultSession: ObservableObject {
         Clipboard.copyConcealed(value, clearAfter: TimeInterval(AppSettings.clipboardSeconds))
     }
 
+    /// Types a field into `app`. Returns an error message to show, or nil on success.
+    func typeField(_ field: String, of id: UUID, into app: NSRunningApplication?) async -> String? {
+        guard AppSettings.autoTypeEnabled else { return "Auto-type is off. Enable it in Settings → Security." }
+        guard let app else { return AutoTypeError.noTargetApp.errorDescription }
+        do {
+            let value: String?
+            if field == "username" {
+                value = items.first { $0.id == id }?.username
+            } else {
+                value = try details(id).fields[field]
+            }
+            guard let value, !value.isEmpty else { return "This item has no \(field)." }
+            _ = try await AutoType.type(value, into: app)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     /// Copies a secret field without keeping the decoded details around.
     func copyField(_ field: String, of id: UUID) {
         do {

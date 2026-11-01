@@ -10,6 +10,8 @@ final class QuickAccessController {
 
     private var panel: QuickAccessPanel?
     private(set) var frontmostBundleID: String?
+    /// The application to type into; captured before the panel takes key status.
+    private(set) var frontmostApp: NSRunningApplication?
     private var session: VaultSession?
 
     private init() {}
@@ -47,9 +49,9 @@ final class QuickAccessController {
     func show() {
         guard let panel else { return }
         // Capture before we take key status; the frontmost app is the fill target.
-        frontmostBundleID = NSWorkspace.shared.frontmostApplication.flatMap { app in
-            app.bundleIdentifier == Bundle.main.bundleIdentifier ? nil : app.bundleIdentifier
-        }
+        let front = NSWorkspace.shared.frontmostApplication
+        frontmostApp = front?.bundleIdentifier == Bundle.main.bundleIdentifier ? nil : front
+        frontmostBundleID = frontmostApp?.bundleIdentifier
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
             let size = panel.frame.size
