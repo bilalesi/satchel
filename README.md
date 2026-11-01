@@ -66,9 +66,15 @@ Use: focus a login field and the matching logins appear under it; click one to f
 
 Matching: items match a page when their site has the same registrable domain under the Public Suffix List (`accounts.google.com` and `mail.google.com` are one site; `accounts.google.com.evil.io` is not). `http://` pages match only loopback hosts or items saved with an explicit `http://` URL. Frames never receive credentials; only the top page does.
 
+## Auto-type into other apps (Discord, Teams, DBeaver, terminals)
+
+Settings → Security → **Auto-type**. Enabling it asks for the Accessibility permission (System Settings → Privacy & Security → Accessibility → Vault). Then: click into the field in the target app, press ⌥Space, pick the item, press **⇧↩** to type the secret or **⌥↩** to type the username. Quick Access lists items linked to the app in front first.
+
+How it types: the field that is focused in the target app is read through Accessibility; it must be a text field, otherwise nothing is typed. The value is set through Accessibility and read back; if the app ignores that (Electron apps do), the text is sent as Unicode keystrokes, which work in any keyboard layout. Terminal's Secure Keyboard Entry blocks keystrokes; the panel says so instead of typing blindly. After rebuilding the app, macOS may require the permission to be granted again.
+
 ## Not yet built
 
-The Safari credential provider, auto-type into other apps, S3 backend. See phases 3–5 in the investigation document.
+The Safari credential provider (needs a paid Apple Developer account for the entitlement), S3 backend. See the investigation document.
 
 ## Touch ID and rebuilds
 
