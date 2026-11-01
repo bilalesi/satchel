@@ -16,7 +16,7 @@
 - Exactly one third-party dependency: `https://github.com/jedisct1/swift-sodium` from `0.11.0`.
 - Working name `Vault`, bundle id `com.bilalesi.vault`; both live only in `AppIdentity.swift`.
 - Secrets never exist as `String` outside a single expression; secret buffers are `SecureBytes`.
-- KDF: Argon2id, memory 64 MiB, iterations 3, parallelism 4, 16-byte salt; parameters stored in the header.
+- KDF: Argon2id, memory 256 MiB, iterations 3, parallelism 1 (libsodium has one lane; measured 324 ms on the owner's Mac), 16-byte salt; parameters stored in the header.
 - Item/overview/manifest keys are HKDF-SHA256 of the vault key with info strings `"item"`, `"overview"`, `"manifest"`.
 - AEAD everywhere: XChaCha20-Poly1305-IETF, 24-byte random nonce, AAD = item header bytes.
 - No logging of secrets; no `print` in `VaultCore`.

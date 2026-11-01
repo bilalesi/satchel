@@ -15,7 +15,9 @@ let package = Package(
     targets: [
         .target(
             name: "VaultCore",
-            dependencies: [.product(name: "Sodium", package: "swift-sodium")],
+            // Raw C API on purpose: the Swift wrapper copies secrets into plain arrays
+            // and has no secure allocator. We call libsodium on SecureBytes buffers directly.
+            dependencies: [.product(name: "Clibsodium", package: "swift-sodium")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
