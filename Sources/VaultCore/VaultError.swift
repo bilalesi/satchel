@@ -14,6 +14,8 @@ public enum VaultError: Error, Equatable, Sendable {
     case biometryUnavailable
     /// Secure Enclave key invalidated because the biometric set changed.
     case biometryChanged
+    /// The user dismissed the Touch ID prompt. Not an error to display.
+    case cancelled
     case locked
     case io(String)
 }
@@ -31,6 +33,7 @@ extension VaultError: LocalizedError {
             return "The remote vault is older (generation \(remote)) than this device last saw (\(local))."
         case .biometryUnavailable: return "Touch ID is not available."
         case .biometryChanged: return "Touch ID enrollment changed. Unlock with your password and enable Touch ID again."
+        case .cancelled: return "Cancelled."
         case .locked: return "The vault is locked."
         case .io(let message): return message
         }
