@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public struct GitHubRepo: Codable, Equatable, Hashable, Sendable {
     public var owner: String
@@ -135,11 +136,22 @@ public final class GitHubStore: RemoteStore {
         return r
     }
 
+    private static let log = Logger(subsystem: AppIdentity.bundleID, category: "github")
+
+    /// Logs method, path and status only: never the token, never bodies.
     private func send(_ req: URLRequest) async throws -> (Data, Int) {
+        let what = "\(req.httpMethod ?? "?") \(req.url?.path ?? "?")"
         do {
             let (data, resp) = try await session.data(for: req)
-            return (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if status >= 400 {
+                Self.log.error("\(what, privacy: .public) → \(status) \(self.message(data), privacy: .public)")
+            } else {
+                Self.log.info("\(what, privacy: .public) → \(status)")
+            }
+            return (data, status)
         } catch {
+            Self.log.error("\(what, privacy: .public) → network error \(error.localizedDescription, privacy: .public)")
             throw SyncError.network(error.localizedDescription)
         }
     }

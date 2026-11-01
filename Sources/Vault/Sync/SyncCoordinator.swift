@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import os
 import VaultCore
 
 /// Decides *when* to sync; `SyncEngine` decides *what*. One run at a time, a request
@@ -24,6 +25,7 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
+    private static let log = Logger(subsystem: AppIdentity.bundleID, category: "sync")
     private weak var session: VaultSession?
     private var debounce: Task<Void, Never>?
     private var running = false
@@ -73,6 +75,7 @@ final class SyncCoordinator: ObservableObject {
         running = true
         status = .syncing
         defer { running = false }
+        Self.log.info("sync start: \(self.config.displayName, privacy: .public)")
         do {
             let config = self.config
             // Token lookup and the whole run stay off the main thread (Keychain migration may prompt).
@@ -84,9 +87,12 @@ final class SyncCoordinator: ObservableObject {
             lastReport = report
             lastSyncAt = Date()
             status = .idle
+            Self.log.info("sync ok: pulled \(report.pulled) pushed \(report.pushed) conflicts \(report.conflicts) generation \(report.generation)")
             if report.pulled > 0 || report.conflicts > 0 { try session.reload() }
         } catch {
-            status = .error(Self.describe(error))
+            let text = Self.describe(error)
+            Self.log.error("sync failed: \(text, privacy: .public)")
+            status = .error(text)
         }
         if dirty {
             dirty = false
@@ -122,6 +128,7 @@ final class SyncCoordinator: ObservableObject {
             let hasVault = try await remote.get(RemotePaths.manifest) != nil
             return "Folder reachable. " + (hasVault ? "A vault is already there." : "No vault there yet.")
         } catch {
+            Self.log.error("test connection failed: \(Self.describe(error), privacy: .public)")
             return Self.describe(error)
         }
     }
