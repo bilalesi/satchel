@@ -1,7 +1,9 @@
 import Foundation
 
-public enum ItemType: String, Codable, CaseIterable, Sendable {
+public enum ItemType: String, Codable, CaseIterable, Sendable, Identifiable {
     case login, apiKey, dbCredential, webhook, secureNote, sshKey
+
+    public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
