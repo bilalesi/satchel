@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Hardened runtime is enabled by --options runtime at sign time.
+	     Deliberately absent: disable-library-validation, allow-dyld-environment-variables,
+	     get-task-allow, app-sandbox (auto-type in phase 5 needs Accessibility). -->
+</dict>
+</plist>
