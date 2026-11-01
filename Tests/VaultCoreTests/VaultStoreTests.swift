@@ -240,6 +240,55 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(again.header.updatedAt, again.header.createdAt)
     }
 
+    func testMergeConflictKeepsBothValuesAndIsDeterministic() throws {
+        let store = try makeStore()
+        let (o, d) = login("Gmail", pass: "base")
+        try store.save(overview: o, details: d)
+        let base = try store.itemData(o.id)!
+        try store.save(overview: o, details: ItemDetails(fields: ["password": "left"]))
+        let left = try store.itemData(o.id)!
+        // Build a "remote" edit from the same base with a later timestamp.
+        let keys = VaultKeys(vaultKey: try store.withVaultKey { $0 })
+        var o2 = try ItemFile.decodeOverview(base, keys: keys).overview
+        o2.updatedAt = Date().addingTimeInterval(5).millisecondPrecision
+        let right = try ItemFile.encode(overview: o2, details: ItemDetails(fields: ["password": "right"]), version: 2, deleted: false, keys: keys)
+
+        let merged = try store.mergeConflict(local: left, remote: right)
+        let header = try ItemFile.decodeHeader(merged)
+        XCTAssertEqual(header.version, 3)
+        let details = try ItemFile.decodeDetails(merged, keys: keys)
+        XCTAssertEqual(details.fields["password"], "right")
+        XCTAssertEqual(details.history.map(\.value), ["left"])
+        XCTAssertTrue(try ItemFile.decodeOverview(merged, keys: keys).overview.tags.contains("conflict"))
+        // Same inputs the other way around pick the same winner; merging again adds no duplicate history.
+        let mirrored = try store.mergeConflict(local: right, remote: left)
+        XCTAssertEqual(try ItemFile.decodeDetails(mirrored, keys: keys).fields["password"], "right")
+        let twice = try store.mergeConflict(local: merged, remote: left)
+        XCTAssertEqual(try ItemFile.decodeDetails(twice, keys: keys).history.map(\.value), ["left"])
+    }
+
+    func testWriteRawItemRejectsForeignVault() throws {
+        let store = try makeStore()
+        let foreign = VaultKeys(vaultKey: VaultKey.generate())
+        let (o, d) = login("Evil", pass: "x")
+        let data = try ItemFile.encode(overview: o, details: d, version: 1, deleted: false, keys: foreign)
+        XCTAssertThrowsError(try store.writeRawItem(data)) { XCTAssertEqual($0 as? VaultError, .authenticationFailed) }
+        XCTAssertNil(try store.itemData(o.id))
+        XCTAssertThrowsError(try store.writeRawItem(Data(count: 3))) { XCTAssertEqual($0 as? VaultError, .corruptItemData) }
+    }
+
+    func testSyncStateRoundTrip() throws {
+        let store = try makeStore()
+        XCTAssertEqual(store.syncState, SyncState())
+        var s = SyncState()
+        s.lastGeneration = 7
+        s.synced = [UUID().uuidString: 3]
+        s.lastSyncAt = Date().millisecondPrecision
+        try store.saveSyncState(s)
+        XCTAssertEqual(store.syncState, s)
+        XCTAssertEqual(s.baseVersion(of: UUID()), 0)
+    }
+
     func testChangePasswordBumpsHeaderUpdatedAt() throws {
         let store = try makeStore()
         let before = store.header.updatedAt

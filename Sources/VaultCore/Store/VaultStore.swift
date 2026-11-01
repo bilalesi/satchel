@@ -264,6 +264,113 @@ public final class VaultStore: @unchecked Sendable {
         try writeHeader(h)
     }
 
+    // MARK: Sync support (raw encrypted bytes; no plaintext leaves this class)
+
+    private var syncStateURL: URL { url.appendingPathComponent(SyncState.fileName) }
+
+    public var syncState: SyncState {
+        guard let data = try? Data(contentsOf: syncStateURL),
+              let s = try? JSONCoding.decoder.decode(SyncState.self, from: data) else { return SyncState() }
+        return s
+    }
+
+    public func saveSyncState(_ state: SyncState) throws {
+        try AtomicFile.write(try JSONCoding.encoder.encode(state), to: syncStateURL)
+    }
+
+    public func headerData() throws -> Data { try AtomicFile.read(headerURL) }
+
+    public func manifestData() throws -> Data { try AtomicFile.read(manifestURL) }
+
+    public func itemData(_ id: UUID) throws -> Data? {
+        let u = itemURL(id)
+        guard FileManager.default.fileExists(atPath: u.path) else { return nil }
+        return try AtomicFile.read(u)
+    }
+
+    public func itemIDsOnDisk() throws -> [UUID] {
+        do {
+            return try FileManager.default.contentsOfDirectory(atPath: itemsURL.path)
+                .filter { $0.hasSuffix("." + ItemFile.fileExtension) && !$0.hasPrefix(".") }
+                .compactMap { UUID(uuidString: String($0.dropLast(ItemFile.fileExtension.count + 1))) }
+        } catch { throw VaultError.io(error.localizedDescription) }
+    }
+
+    public func decodeRemoteManifest(_ data: Data) throws -> Manifest {
+        try ManifestFile.decode(data, key: try requireKeys().manifest)
+    }
+
+    public func encodeManifest(_ m: Manifest) throws -> Data {
+        try ManifestFile.encode(m, key: try requireKeys().manifest)
+    }
+
+    /// Proves remote bytes belong to this vault (overview box opens with our key) and are
+    /// internally consistent. Throws `corruptItemData` or `authenticationFailed`.
+    @discardableResult
+    public func verifyRemoteItem(_ data: Data) throws -> ItemFileHeader {
+        try ItemFile.decodeOverview(data, keys: try requireKeys()).header
+    }
+
+    /// Stores verified remote bytes as-is (no re-encryption). Does not touch the manifest.
+    public func writeRawItem(_ data: Data) throws {
+        let header = try verifyRemoteItem(data)
+        try AtomicFile.write(data, to: itemURL(header.id))
+    }
+
+    /// Same item changed on two devices. Newer `updatedAt` wins; the loser's secret fields
+    /// go into history (deduplicated, capped); the winner is tagged `conflict`.
+    /// Deterministic given the same inputs, so both devices converge.
+    public func mergeConflict(local: Data, remote: Data) throws -> Data {
+        let keys = try requireKeys()
+        let l = try ItemFile.decodeOverview(local, keys: keys)
+        let r = try ItemFile.decodeOverview(remote, keys: keys)
+        guard l.header.id == r.header.id else { throw VaultError.corruptItemData }
+        let lDetails = l.header.deleted ? ItemDetails() : try ItemFile.decodeDetails(local, keys: keys)
+        let rDetails = r.header.deleted ? ItemDetails() : try ItemFile.decodeDetails(remote, keys: keys)
+
+        let localWins = l.overview.updatedAt > r.overview.updatedAt
+            || (l.overview.updatedAt == r.overview.updatedAt && GitBlob.sha(local) > GitBlob.sha(remote))
+        let (win, lose) = localWins ? (l, r) : (r, l)
+        var winDetails = localWins ? lDetails : rDetails
+        let loseDetails = localWins ? rDetails : lDetails
+
+        var additions: [SecretRevision] = []
+        for key in ItemType.secretFieldKeys {
+            guard let v = loseDetails.fields[key], !v.isEmpty, v != winDetails.fields[key],
+                  !winDetails.history.contains(where: { $0.field == key && $0.value == v }) else { continue }
+            additions.append(SecretRevision(field: key, value: v, changedAt: lose.overview.updatedAt))
+        }
+        winDetails.history = Array((additions + winDetails.history).prefix(ItemDetails.historyCap))
+
+        var overview = win.overview
+        if !overview.tags.contains("conflict") { overview.tags.append("conflict") }
+        overview.updatedAt = Date().millisecondPrecision
+        let version = max(l.header.version, r.header.version) + 1
+        let deleted = win.header.deleted
+        return try ItemFile.encode(overview: overview, details: deleted ? nil : winDetails,
+                                   version: version, deleted: deleted, keys: keys)
+    }
+
+    /// Replaces the local manifest with a merged one (no generation bump; the engine set it).
+    public func replaceManifest(_ m: Manifest) throws {
+        let keys = try requireKeys()
+        var next = m
+        next.deviceID = deviceID
+        try AtomicFile.write(try ManifestFile.encode(next, key: keys.manifest), to: manifestURL)
+        manifest = next
+    }
+
+    /// Accepts a header from the remote (already proven by the remote manifest's MAC).
+    public func applyRemoteHeader(_ data: Data) throws {
+        _ = try requireKeys()
+        var h = try VaultHeader.decode(data)
+        h.slots.removeAll { !$0.isPassword }
+        let bytes = h.slots.count == (try VaultHeader.decode(data)).slots.count ? data : try h.encoded()
+        try AtomicFile.write(bytes, to: headerURL)
+        header = h
+        manifest.headerHash = ManifestFile.sha256(bytes)
+    }
+
     // MARK: Files
 
     private func writeHeader(_ h: VaultHeader) throws {
