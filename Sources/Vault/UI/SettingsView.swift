@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.clipboardSecondsKey) private var clipboard = 30
     @AppStorage(AppSettings.hotKeyEnabledKey) private var hotKey = true
     @State private var touchIDPassword = ""
+    @State private var askTouchIDPassword = false
     @State private var oldPassword = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
@@ -35,11 +36,23 @@ struct SettingsView: View {
                         Button("Disable") { session.disableTouchID() }
                     }
                 } else if session.state == .unlocked {
-                    SecureField("Master password", text: $touchIDPassword)
-                    Button("Enable Touch ID") {
-                        Task { await session.enableTouchID(password: touchIDPassword); touchIDPassword = "" }
+                    HStack {
+                        Label("Disabled", systemImage: "touchid").foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Enable Touch ID…") { askTouchIDPassword = true }
+                            .disabled(session.busy)
                     }
-                    .disabled(touchIDPassword.isEmpty || session.busy)
+                    .alert("Confirm your master password", isPresented: $askTouchIDPassword) {
+                        SecureField("Master password", text: $touchIDPassword)
+                        Button("Enable") {
+                            let pw = touchIDPassword
+                            touchIDPassword = ""
+                            Task { await session.enableTouchID(password: pw) }
+                        }
+                        Button("Cancel", role: .cancel) { touchIDPassword = "" }
+                    } message: {
+                        Text("Touch ID is an extra way to unlock. Your password keeps working.")
+                    }
                     Text("The vault key is wrapped by a Secure Enclave key bound to the current fingerprints. Changing fingerprints disables it until you enable it again.")
                         .font(.callout).foregroundStyle(.secondary)
                 } else {
