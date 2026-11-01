@@ -17,16 +17,24 @@ public final class VaultStore: @unchecked Sendable {
     private var keys: VaultKeys?
     private var vaultKey: SecureBytes?
     private let deviceID: UUID
+    /// Device-bound Touch ID slot, stored in `touchid.slot`, never synced.
+    private var touchIDSlot: KeySlot?
 
+    public static let touchIDSlotFileName = "touchid.slot"
     public var itemsURL: URL { url.appendingPathComponent("items", isDirectory: true) }
     private var headerURL: URL { url.appendingPathComponent(VaultHeader.fileName) }
     private var manifestURL: URL { url.appendingPathComponent(Manifest.fileName) }
+    private var touchIDSlotURL: URL { url.appendingPathComponent(Self.touchIDSlotFileName) }
 
     private init(url: URL, header: VaultHeader, manifest: Manifest, deviceID: UUID) {
         self.url = url
         self.header = header
         self.manifest = manifest
         self.deviceID = deviceID
+        if let data = try? Data(contentsOf: touchIDSlotURL),
+           let slot = try? JSONCoding.decoder.decode(KeySlot.self, from: data), slot.isSecureEnclave {
+            touchIDSlot = slot
+        }
     }
 
     // MARK: Lifecycle
@@ -68,9 +76,9 @@ public final class VaultStore: @unchecked Sendable {
 
     public var isUnlocked: Bool { keys != nil }
 
-    public var hasSecureEnclaveSlot: Bool { header.slots.contains { $0.isSecureEnclave } }
+    public var hasSecureEnclaveSlot: Bool { touchIDSlot != nil }
 
-    public var secureEnclaveSlot: KeySlot? { header.slots.first { $0.isSecureEnclave } }
+    public var secureEnclaveSlot: KeySlot? { touchIDSlot }
 
     public func unlock(password: SecureBytes) throws {
         guard let slot = header.slots.first(where: { $0.isPassword }) else { throw VaultError.corruptHeader }
@@ -90,6 +98,18 @@ public final class VaultStore: @unchecked Sendable {
         candidate.wipe()
         manifest = decoded
         installKeys(vk)
+        try migrateLegacyTouchIDSlot()
+    }
+
+    /// Phase 1 stored the Secure Enclave slot inside the synced header. Move it out once.
+    private func migrateLegacyTouchIDSlot() throws {
+        guard header.slots.contains(where: { $0.isSecureEnclave }) else { return }
+        if touchIDSlot == nil, let legacy = header.slots.first(where: { $0.isSecureEnclave }) {
+            try writeTouchIDSlot(legacy)
+        }
+        var h = header
+        h.slots.removeAll { $0.isSecureEnclave }
+        try writeHeader(h)
     }
 
     public func lock() {
@@ -218,16 +238,20 @@ public final class VaultStore: @unchecked Sendable {
 
     public func addSecureEnclaveSlot(_ slot: KeySlot) throws {
         guard slot.isSecureEnclave else { throw VaultError.cryptoFailure }
-        var h = header
-        h.slots.removeAll { $0.isSecureEnclave }
-        h.slots.append(slot)
-        try writeHeader(h)
+        _ = try requireKeys()
+        try writeTouchIDSlot(slot)
     }
 
     public func removeSecureEnclaveSlots() throws {
-        var h = header
-        h.slots.removeAll { $0.isSecureEnclave }
-        try writeHeader(h)
+        touchIDSlot = nil
+        do { try FileManager.default.removeItem(at: touchIDSlotURL) } catch CocoaError.fileNoSuchFile {
+        } catch let e as NSError where e.code == NSFileNoSuchFileError {
+        } catch { throw VaultError.io(error.localizedDescription) }
+    }
+
+    private func writeTouchIDSlot(_ slot: KeySlot) throws {
+        try AtomicFile.write(try JSONCoding.encoder.encode(slot), to: touchIDSlotURL)
+        touchIDSlot = slot
     }
 
     public func changePassword(old: SecureBytes, new: SecureBytes, kdfParams: KDFParams = .fresh()) throws {
@@ -236,6 +260,7 @@ public final class VaultStore: @unchecked Sendable {
         guard try header.slots[idx].unwrap(password: old) == vaultKey else { throw VaultError.authenticationFailed }
         var h = header
         h.slots[idx] = try KeySlot.makePassword(new, vaultKey: vaultKey, params: kdfParams)
+        h.updatedAt = Date().millisecondPrecision
         try writeHeader(h)
     }
 

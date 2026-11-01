@@ -9,13 +9,29 @@ public struct VaultHeader: Codable, Equatable, Sendable {
     public var formatVersion: Int
     public var vaultID: UUID
     public var createdAt: Date
+    /// Bumped on password change; sync keeps the newer header when both devices changed it.
+    public var updatedAt: Date
+    /// Password slots only. The Touch ID slot is device-bound and lives in a local file.
     public var slots: [KeySlot]
 
-    public init(vaultID: UUID = UUID(), createdAt: Date = Date(), slots: [KeySlot]) {
+    public init(vaultID: UUID = UUID(), createdAt: Date = Date(), updatedAt: Date? = nil, slots: [KeySlot]) {
         self.formatVersion = Self.currentFormatVersion
         self.vaultID = vaultID
         self.createdAt = createdAt.millisecondPrecision
+        self.updatedAt = (updatedAt ?? createdAt).millisecondPrecision
         self.slots = slots
+    }
+
+    enum CodingKeys: String, CodingKey { case formatVersion, vaultID, createdAt, updatedAt, slots }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try c.decode(Int.self, forKey: .formatVersion)
+        vaultID = try c.decode(UUID.self, forKey: .vaultID)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        // Phase 1 headers had no updatedAt.
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        slots = try c.decode([KeySlot].self, forKey: .slots)
     }
 
     public func encoded() throws -> Data {

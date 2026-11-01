@@ -194,18 +194,57 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(try reopened.details(for: o.id).fields["password"], "a")
     }
 
-    func testSecureEnclaveSlotBookkeeping() throws {
+    func testSecureEnclaveSlotIsLocalOnly() throws {
         let store = try makeStore()
         XCTAssertFalse(store.hasSecureEnclaveSlot)
+        let headerBefore = try Data(contentsOf: dir.appendingPathComponent(VaultHeader.fileName))
         try store.addSecureEnclaveSlot(.secureEnclave(keyData: Data([1]), wrappedKey: Data([2])))
         XCTAssertTrue(store.hasSecureEnclaveSlot)
         try store.addSecureEnclaveSlot(.secureEnclave(keyData: Data([3]), wrappedKey: Data([4])))
-        XCTAssertEqual(store.header.slots.filter(\.isSecureEnclave).count, 1)
+        XCTAssertEqual(store.secureEnclaveSlot, .secureEnclave(keyData: Data([3]), wrappedKey: Data([4])))
+        // Header and manifest untouched: the slot never reaches the synced files.
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent(VaultHeader.fileName)), headerBefore)
+        XCTAssertTrue(store.header.slots.allSatisfy(\.isPassword))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent(VaultStore.touchIDSlotFileName).path))
+
         let reopened = try VaultStore.open(at: dir, deviceID: device)
-        try reopened.unlock(password: pw) // header hash in manifest was updated
-        XCTAssertTrue(reopened.hasSecureEnclaveSlot)
+        XCTAssertTrue(reopened.hasSecureEnclaveSlot) // readable before unlock, as the unlock screen needs
+        try reopened.unlock(password: pw)
         try reopened.removeSecureEnclaveSlots()
+        try reopened.removeSecureEnclaveSlots() // idempotent
         XCTAssertFalse(reopened.hasSecureEnclaveSlot)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(VaultStore.touchIDSlotFileName).path))
         XCTAssertThrowsError(try store.addSecureEnclaveSlot(.password(params: cheap, wrappedKey: Data())))
+    }
+
+    func testLegacyHeaderSlotIsMigratedOnUnlock() throws {
+        let store = try makeStore()
+        // Forge a phase-1 header that carries the SE slot, with a matching manifest MAC.
+        var legacy = store.header
+        legacy.slots.append(.secureEnclave(keyData: Data([9]), wrappedKey: Data([8])))
+        let headerData = try legacy.encoded()
+        try headerData.write(to: dir.appendingPathComponent(VaultHeader.fileName))
+        var m = store.manifest
+        m.headerHash = ManifestFile.sha256(headerData)
+        let keys = VaultKeys(vaultKey: try store.withVaultKey { $0 })
+        try ManifestFile.encode(m, key: keys.manifest).write(to: dir.appendingPathComponent(Manifest.fileName))
+
+        let reopened = try VaultStore.open(at: dir, deviceID: device)
+        try reopened.unlock(password: pw)
+        XCTAssertTrue(reopened.hasSecureEnclaveSlot)
+        XCTAssertEqual(reopened.secureEnclaveSlot, .secureEnclave(keyData: Data([9]), wrappedKey: Data([8])))
+        XCTAssertTrue(reopened.header.slots.allSatisfy(\.isPassword))
+        // And the rewritten header still verifies on the next unlock.
+        let again = try VaultStore.open(at: dir, deviceID: device)
+        try again.unlock(password: pw)
+        XCTAssertEqual(again.header.updatedAt, again.header.createdAt)
+    }
+
+    func testChangePasswordBumpsHeaderUpdatedAt() throws {
+        let store = try makeStore()
+        let before = store.header.updatedAt
+        Thread.sleep(forTimeInterval: 0.002)
+        try store.changePassword(old: pw, new: SecureBytes(utf8: "another"), kdfParams: cheap)
+        XCTAssertGreaterThan(store.header.updatedAt, before)
     }
 }
