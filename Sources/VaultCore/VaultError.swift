@@ -7,6 +7,8 @@ public enum VaultError: Error, Equatable, Sendable {
     case cryptoFailure
     case corruptHeader
     case corruptItem(UUID)
+    /// Raised by `ItemFile` which does not know the file name; `VaultStore` maps it to `corruptItem(id)`.
+    case corruptItemData
     case corruptManifest
     case rollbackDetected(local: UInt64, remote: UInt64)
     case biometryUnavailable
@@ -23,6 +25,7 @@ extension VaultError: LocalizedError {
         case .cryptoFailure: return "A cryptographic operation failed."
         case .corruptHeader: return "The vault header is unreadable."
         case .corruptItem(let id): return "Item \(id.uuidString) is unreadable."
+        case .corruptItemData: return "Item data is unreadable."
         case .corruptManifest: return "The vault manifest failed verification."
         case .rollbackDetected(let local, let remote):
             return "The remote vault is older (generation \(remote)) than this device last saw (\(local))."

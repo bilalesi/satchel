@@ -180,7 +180,7 @@ Why this shape (this is the **LUKS / 1Password keyset** pattern):
 - The recovery key exists because Argon2id + a strong passphrase is unrecoverable by design.
 - **Overview vs details split (1Password pattern):** on unlock we decrypt only the overview blobs (a few KB per item) to build the search index and to answer the browser extension's "what matches gmail.com?" question. Passwords, API keys and notes stay encrypted until the user selects an item. Memory exposure is minimized and unlock of 5,000 items stays well under 100 ms after the KDF.
 
-KDF parameters: RFC 9106's second recommendation (64 MiB, t=3, p=4) is the floor; Bitwarden ships 32 MiB / t=6 / p=4 and PBKDF2 600,000 as its minimum. Store the parameters in the vault header so they can be raised later; re-wrapping slot[0] is cheap. Measure on the target Mac: aim for 300–700 ms unlock.
+KDF parameters: RFC 9106's second recommendation (64 MiB, t=3, p=4) is the floor; Bitwarden ships 32 MiB / t=6 / p=4 and PBKDF2 600,000 as its minimum. Store the parameters in the vault header so they can be raised later; re-wrapping slot[0] is cheap. **Measured 2026-11-01 on the owner's Mac with libsodium (single lane, so p=1):** 64 MiB/t=3 = 73 ms, 256 MiB/t=3 = 324 ms, 512 MiB/t=3 = 676 ms. **Chosen default: 256 MiB, t=3, p=1**, inside the 300–700 ms target and four times the RFC floor's memory.
 
 ### 5.2 Item encryption
 
