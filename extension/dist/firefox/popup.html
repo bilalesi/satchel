@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot" id="dot"></span><strong>Vault</strong></div>
+    <span id="status" class="muted">…</span>
+  </header>
+  <section id="locked" hidden>
+    <p class="muted">The vault is locked.</p>
+    <button id="unlock" class="primary">Unlock with Touch ID</button>
+  </section>
+  <section id="offline" hidden>
+    <p class="muted">Vault app is not running or the host is not installed.</p>
+    <p class="muted small">Open Vault → Settings → Browsers → Install.</p>
+  </section>
+  <section id="matches" hidden>
+    <div id="list"></div>
+    <p id="none" class="muted" hidden>No login saved for this site.</p>
+  </section>
+  <footer>
+    <button id="save" title="Save the username and password typed on this page">Save login</button>
+    <button id="generate" title="Copy a new strong password">Generate</button>
+    <button id="open" title="Open the Vault app">Open</button>
+  </footer>
+  <p id="note" class="muted small" hidden></p>
+  <script src="popup.js"></script>
+</body>
+</html>

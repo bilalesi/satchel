@@ -51,9 +51,24 @@ What is uploaded: `vault.vhdr` (KDF parameters, password-wrapped key), `manifest
 
 If the remote ever serves an older manifest than this Mac last saw (a restored backup, a malicious host), sync stops with a rollback error instead of silently reverting items.
 
+## Browser extension (Dia, Arc, Chrome, Firefox)
+
+Three parts: the extension in the browser, a tiny relay `vault-host` inside the app bundle that the browser spawns, and the app, which listens on a private socket and makes every decision (which items match a page, whether the page may receive an item, unlocking).
+
+Setup, once per browser:
+
+1. Vault → Settings → Browsers → **Install** next to the browser. This writes the native messaging manifest into the browser's profile so it may spawn `vault-host`. Re-run it if you move the app.
+2. Load the extension. The files are inside the app: click **Reveal** in the same pane.
+   - Dia, Arc, Chrome: Extensions page → Developer mode → Load unpacked → the `chromium` folder. The extension id is fixed by the key in its manifest, so reloading keeps it working.
+   - Firefox: `about:debugging` → This Firefox → Load Temporary Add-on → `firefox/manifest.json`. Temporary add-ons disappear on restart; for a permanent install, sign it as "unlisted" on addons.mozilla.org (free) and install the signed file.
+
+Use: focus a login field and the matching logins appear under it; click one to fill username and password. ⌘⇧L fills the best match. The toolbar popup lists matches, unlocks the vault with Touch ID, saves the login typed on the page, and copies a generated password. Nothing is filled without a click or the shortcut, and the extension never submits forms.
+
+Matching: items match a page when their site has the same registrable domain under the Public Suffix List (`accounts.google.com` and `mail.google.com` are one site; `accounts.google.com.evil.io` is not). `http://` pages match only loopback hosts or items saved with an explicit `http://` URL. Frames never receive credentials; only the top page does.
+
 ## Not yet built
 
-The browser extension (Dia, Firefox), the Safari credential provider, auto-type into other apps, S3 backend. See phases 3–5 in the investigation document.
+The Safari credential provider, auto-type into other apps, S3 backend. See phases 3–5 in the investigation document.
 
 ## Touch ID and rebuilds
 

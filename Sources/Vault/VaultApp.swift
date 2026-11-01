@@ -51,10 +51,14 @@ struct VaultApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var session: VaultSession?
+    @MainActor static var bridge: BridgeServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let session = Self.session else { return }
         QuickAccessController.shared.install(session: session)
+        let handler = BridgeHandler(session: session)
+        Self.bridge = try? BridgeServer { req in await handler.handle(req) }
+        NativeMessagingInstaller.refreshStalePaths()
         HotKey.shared.onPress = { QuickAccessController.shared.toggle() }
         HotKey.shared.setEnabled(UserDefaults.standard.bool(forKey: AppSettings.hotKeyEnabledKey))
         // Every window of this app stays out of screen capture, including ones created later.

@@ -80,6 +80,9 @@ struct SettingsView: View {
             Section("Sync") {
                 SyncSettings()
             }
+            Section("Browsers") {
+                BrowserSettings()
+            }
             Section("Vault") {
                 LabeledContent("Location", value: session.vaultURL.path)
                 Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([session.vaultURL]) }

@@ -18,11 +18,19 @@ let package = Package(
             // Raw C API on purpose: the Swift wrapper copies secrets into plain arrays
             // and has no secure allocator. We call libsodium on SecureBytes buffers directly.
             dependencies: [.product(name: "Clibsodium", package: "swift-sodium")],
+            resources: [.copy("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
             name: "Vault",
             dependencies: ["VaultCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // Native messaging host: a stdio ↔ unix-socket relay the browser spawns.
+        .executableTarget(
+            name: "vault-host",
+            dependencies: ["VaultCore"],
+            path: "Sources/VaultHost",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

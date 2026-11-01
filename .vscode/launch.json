@@ -1,0 +1,44 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:vault}",
+      "name": "Debug Vault",
+      "target": "Vault",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug Vault"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:vault}",
+      "name": "Release Vault",
+      "target": "Vault",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release Vault"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:vault}",
+      "name": "Debug vault-host",
+      "target": "vault-host",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug vault-host"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:vault}",
+      "name": "Release vault-host",
+      "target": "vault-host",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release vault-host"
+    }
+  ]
+}
