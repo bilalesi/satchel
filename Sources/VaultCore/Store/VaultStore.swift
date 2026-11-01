@@ -278,6 +278,32 @@ public final class VaultStore: @unchecked Sendable {
         try writeHeader(h)
     }
 
+    // MARK: Local secrets (remote tokens): encrypted under the vault key, stored as
+    // `<name>.local` next to the header, never part of sync. Reason: the login Keychain
+    // prompts on every rebuild of an ad-hoc-signed app and blocks the main thread.
+
+    private func localSecretURL(_ name: String) -> URL { url.appendingPathComponent(name + ".local") }
+
+    public func localSecret(_ name: String) throws -> String? {
+        mutex.lock(); defer { mutex.unlock() }
+        let keys = try requireKeys()
+        let u = localSecretURL(name)
+        guard FileManager.default.fileExists(atPath: u.path) else { return nil }
+        return try AEAD.open(try AtomicFile.read(u), key: keys.local, aad: Data(name.utf8)).utf8String()
+    }
+
+    /// `nil` removes the secret.
+    public func setLocalSecret(_ name: String, _ value: String?) throws {
+        mutex.lock(); defer { mutex.unlock() }
+        let keys = try requireKeys()
+        let u = localSecretURL(name)
+        guard let value, !value.isEmpty else {
+            try? FileManager.default.removeItem(at: u)
+            return
+        }
+        try AtomicFile.write(try AEAD.seal(SecureBytes(utf8: value), key: keys.local, aad: Data(name.utf8)), to: u)
+    }
+
     // MARK: Sync support (raw encrypted bytes; no plaintext leaves this class)
 
     private var syncStateURL: URL { url.appendingPathComponent(SyncState.fileName) }

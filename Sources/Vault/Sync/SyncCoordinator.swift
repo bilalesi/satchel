@@ -74,9 +74,13 @@ final class SyncCoordinator: ObservableObject {
         status = .syncing
         defer { running = false }
         do {
-            let remote = try config.makeStore()
-            let engine = SyncEngine(store: store, remote: remote)
-            let report = try await Task.detached(priority: .utility) { try await engine.sync() }.value
+            let config = self.config
+            // Token lookup and the whole run stay off the main thread (Keychain migration may prompt).
+            let report = try await Task.detached(priority: .utility) {
+                let token = config.needsToken ? try RemoteConfig.resolveToken(store: store) : nil
+                let remote = try config.makeStore(token: token)
+                return try await SyncEngine(store: store, remote: remote).sync()
+            }.value
             lastReport = report
             lastSyncAt = Date()
             status = .idle
@@ -90,10 +94,26 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
+    /// Stores the GitHub token encrypted in the vault directory.
+    func saveToken(_ token: String) throws {
+        guard let store = session?.store, store.isUnlocked else { throw VaultError.locked }
+        try store.setLocalSecret(RemoteConfig.tokenSecretName, token)
+    }
+
+    var hasToken: Bool {
+        guard let store = session?.store, store.isUnlocked else { return false }
+        return (try? store.localSecret(RemoteConfig.tokenSecretName)) != nil
+    }
+
     /// "Test connection" in settings. Returns a human sentence.
-    func test(_ config: RemoteConfig) async -> String {
+    func test(_ config: RemoteConfig, token typed: String?) async -> String {
         do {
-            let remote = try config.makeStore()
+            let store = session?.store
+            let remote = try await Task.detached { () throws -> RemoteStore in
+                var token = typed?.isEmpty == false ? typed : nil
+                if token == nil, config.needsToken, let store { token = try RemoteConfig.resolveToken(store: store) }
+                return try config.makeStore(token: token)
+            }.value
             if let gh = remote as? GitHubStore {
                 let name = try await gh.verify()
                 let hasVault = try await gh.get(RemotePaths.manifest) != nil

@@ -48,6 +48,7 @@ final class SyncEngineTests: XCTestCase {
         let (o2, d2) = login("Discord", "a2")
         try a.save(overview: o1, details: d1)
         try a.save(overview: o2, details: d2)
+        try a.setLocalSecret("github-token", "secret") // local-only files never leave the Mac
         let r = try await sync(a)
         XCTAssertEqual(r.pushed, 2)
         XCTAssertEqual(Set(remote.paths), ["vault.vhdr", "manifest.vman", RemotePaths.item(o1.id), RemotePaths.item(o2.id)])

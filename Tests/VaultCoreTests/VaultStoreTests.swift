@@ -289,6 +289,21 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(s.baseVersion(of: UUID()), 0)
     }
 
+    func testLocalSecretRoundTrip() throws {
+        let store = try makeStore()
+        XCTAssertNil(try store.localSecret("github-token"))
+        try store.setLocalSecret("github-token", "ghp_abc")
+        XCTAssertEqual(try store.localSecret("github-token"), "ghp_abc")
+        let raw = try Data(contentsOf: dir.appendingPathComponent("github-token.local"))
+        XCTAssertNil(String(data: raw, encoding: .utf8)?.range(of: "ghp_abc"))
+        let reopened = try VaultStore.open(at: dir, deviceID: device)
+        XCTAssertThrowsError(try reopened.localSecret("github-token")) { XCTAssertEqual($0 as? VaultError, .locked) }
+        try reopened.unlock(password: pw)
+        XCTAssertEqual(try reopened.localSecret("github-token"), "ghp_abc")
+        try reopened.setLocalSecret("github-token", nil)
+        XCTAssertNil(try reopened.localSecret("github-token"))
+    }
+
     func testChangePasswordBumpsHeaderUpdatedAt() throws {
         let store = try makeStore()
         let before = store.header.updatedAt

@@ -38,15 +38,14 @@ struct RemoteDraft: Equatable {
         }
     }
 
-    /// Builds the config and stores the token when one was typed.
-    func commit() throws -> RemoteConfig {
+    /// Builds the config. The token is handed to the caller, who stores it in the vault.
+    func commit() -> RemoteConfig {
         switch backend {
         case .off:
             return .off
         case .folder:
             return .folder(URL(fileURLWithPath: (folderPath as NSString).expandingTildeInPath, isDirectory: true))
         case .github:
-            if !token.isEmpty { try KeychainToken.save(token, service: RemoteConfig.tokenService) }
             return .github(GitHubRepo(owner: owner, name: repo, branch: branch, prefix: prefix))
         }
     }
@@ -56,6 +55,7 @@ struct RemoteDraft: Equatable {
 struct RemoteDraftFields: View {
     @Binding var draft: RemoteDraft
     var allowOff = true
+    var tokenSaved = false
 
     var body: some View {
         Picker("Remote", selection: $draft.backend) {
@@ -77,8 +77,8 @@ struct RemoteDraftFields: View {
             TextField("Branch", text: $draft.branch)
             TextField("Folder in repository (optional)", text: $draft.prefix)
             SecureField("Fine-grained token", text: $draft.token,
-                        prompt: Text(KeychainToken.load(service: RemoteConfig.tokenService) == nil ? "github_pat_…" : "saved in Keychain; paste to replace"))
-            Text("Create the token at github.com → Settings → Developer settings → Fine-grained tokens, limited to this repository with Contents: Read and write.")
+                        prompt: Text(tokenSaved ? "saved (encrypted in the vault); paste to replace" : "github_pat_…"))
+            Text("Create the token at github.com → Settings → Developer settings → Fine-grained tokens, limited to this repository with Contents: Read and write. It is stored encrypted next to the vault, never synced.")
                 .font(.callout).foregroundStyle(.secondary)
         }
     }
@@ -102,7 +102,7 @@ struct SyncSettings: View {
 
     var body: some View {
         Group {
-            RemoteDraftFields(draft: $draft)
+            RemoteDraftFields(draft: $draft, tokenSaved: sync.hasToken)
             syncControls
             statusLine
             if let message { Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
@@ -141,15 +141,13 @@ struct SyncSettings: View {
     private func test() async {
         testing = true
         defer { testing = false }
-        do {
-            let cfg = try draft.commit()
-            message = await sync.test(cfg)
-        } catch { message = error.localizedDescription }
+        message = await sync.test(draft.commit(), token: draft.token)
     }
 
     private func save() {
         do {
-            sync.config = try draft.commit()
+            if !draft.token.isEmpty { try sync.saveToken(draft.token) }
+            sync.config = draft.commit()
             draft.token = ""
             message = "Saved."
         } catch { message = error.localizedDescription }
@@ -187,7 +185,7 @@ struct ConnectVaultView: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Connect") { Task { await connect() } }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-                    .disabled(!draft.isComplete || password.isEmpty || session.busy)
+                    .disabled(!draft.isComplete || password.isEmpty || session.busy || (draft.backend == .github && draft.token.isEmpty))
             }
             .padding(14)
         }
@@ -197,14 +195,11 @@ struct ConnectVaultView: View {
 
     private func connect() async {
         message = nil
-        do {
-            let cfg = try draft.commit()
-            if await session.connectExisting(config: cfg, password: password) {
-                password = ""
-                dismiss()
-            } else {
-                message = session.lastError
-            }
-        } catch { message = error.localizedDescription }
+        if await session.connectExisting(config: draft.commit(), token: draft.token, password: password) {
+            password = ""
+            dismiss()
+        } else {
+            message = session.lastError
+        }
     }
 }
