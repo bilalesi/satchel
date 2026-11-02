@@ -83,3 +83,7 @@ The Secure Enclave key is tied to this app's code-signing identity. The ad-hoc s
 ## Renamed from "Vault" (2026-11-02)
 
 Builds before this date used the name Vault and bundle id `com.bilalesi.vault`. The first launch of Satchel moves `Application Support/Vault` to `Application Support/Satchel`, copies the preferences, and replaces the browsers' host manifests. Two things macOS ties to the bundle id must be redone by hand: load the extension again from the new path inside `/Applications/Satchel.app`, and grant the Accessibility permission to Satchel if auto-type is on.
+
+## Credits
+
+Icons: [Codicons](https://github.com/microsoft/vscode-codicons) by Microsoft, licensed CC BY 4.0. The font ships in `Resources/Fonts/` with its license; `scripts/gen-codicons.py` generates the typed icon list the app uses.

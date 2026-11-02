@@ -45,7 +45,7 @@ struct VaultApp: App {
             Divider()
             Button("Quit") { NSApp.terminate(nil) }
         } label: {
-            Image(systemName: session.state == .unlocked ? "lock.open.fill" : "lock.fill")
+            Image(nsImage: (session.state == .unlocked ? Codicon.unlock : Codicon.lock).image(size: 16))
         }
     }
 }

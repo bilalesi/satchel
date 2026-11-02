@@ -3,56 +3,91 @@ import SwiftUI
 import VaultCore
 
 struct BrowserSettings: View {
-    @State private var tick = 0
+    /// Manifest state per browser, re-read after each action. Rows keep a stable identity
+    /// (the browser), so a click updates the row in place instead of rebuilding the list.
+    @State private var states: [NativeMessagingInstaller.Browser: ManifestState] = [:]
     @State private var message: String?
 
+    enum ManifestState { case missing, installed, stale }
+
+    private var browsers: [NativeMessagingInstaller.Browser] {
+        NativeMessagingInstaller.Browser.allCases.filter(\.isInstalled)
+    }
+
     var body: some View {
-        SettingsPage(height: 520) {
-            Section("Connection") { browsers }
+        SettingsPage(height: 560) {
+            Section("Connection") { connection }
             Section("Extension") { extensionFolder }
         }
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() {
+        var next: [NativeMessagingInstaller.Browser: ManifestState] = [:]
+        for b in browsers { next[b] = !b.manifestPresent ? .missing : (b.manifestStale ? .stale : .installed) }
+        states = next
     }
 
     @ViewBuilder
-    private var browsers: some View {
-        ForEach(NativeMessagingInstaller.Browser.allCases.filter(\.isInstalled)) { b in
-            HStack {
+    private var connection: some View {
+        ForEach(browsers) { b in
+            let state = states[b] ?? .missing
+            HStack(spacing: Theme.Space.m) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(b.title)
-                    Text(status(b)).font(.callout).foregroundStyle(b.manifestPresent && !b.manifestStale ? .green : .secondary)
+                    Text(statusText(state)).font(.callout)
+                        .foregroundStyle(state == .installed ? Color.green : state == .stale ? Color.orange : Color.secondary)
                 }
                 Spacer()
-                if b.manifestPresent {
-                    Button("Remove") { NativeMessagingInstaller.remove(b); tick += 1 }
+                // Fixed trailing area: switching between one and two buttons never moves the row.
+                HStack(spacing: Theme.Space.s) {
+                    if state == .missing {
+                        PillButton("Install", icon: .plug, kind: .primary, compact: true) { install(b) }
+                    } else {
+                        IconButton(.trash, help: "Remove \(b.title) connection", kind: .danger, diameter: 24) {
+                            NativeMessagingInstaller.remove(b)
+                            refresh()
+                        }
+                        PillButton("Reinstall", icon: .refresh, compact: true) { install(b) }
+                    }
                 }
-                Button(b.manifestPresent ? "Reinstall" : "Install") {
-                    do { try NativeMessagingInstaller.install(b); message = nil } catch { message = error.localizedDescription }
-                    tick += 1
-                }
+                .frame(width: 150, alignment: .trailing)
             }
-            .id("\(b.rawValue)-\(tick)") // unique per row; a shared id made every row render the same browser
         }
-        if NativeMessagingInstaller.Browser.allCases.filter(\.isInstalled).isEmpty {
+        if browsers.isEmpty {
             Text("No supported browser found (Dia, Arc, Chrome, Firefox).").foregroundStyle(.secondary)
         }
         bridgeStatus
         if let message { Text(message).font(.callout).foregroundStyle(.secondary) }
     }
 
+    private func install(_ b: NativeMessagingInstaller.Browser) {
+        do { try NativeMessagingInstaller.install(b); message = nil } catch { message = error.localizedDescription }
+        refresh()
+    }
+
+    private func statusText(_ state: ManifestState) -> String {
+        switch state {
+        case .missing: return "Not connected"
+        case .installed: return "Connected"
+        case .stale: return "Points at another copy of the app"
+        }
+    }
+
     private func folderRow(_ title: String, _ url: URL) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.Space.s) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.callout)
                 Text(url.path).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
             }
             Spacer()
-            Button("Copy path") {
+            IconButton(.copy, help: "Copy path", kind: .secondary, diameter: 26) {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(url.path, forType: .string)
                 message = "Path copied. In the Load unpacked dialog press ⌘⇧G and paste it."
             }
-            Button("Open in Finder") {
+            IconButton(.folderOpened, help: "Open in Finder", kind: .secondary, diameter: 26) {
                 if !NSWorkspace.shared.open(url) { message = "Finder could not open \(url.path)" }
             }
         }
@@ -67,7 +102,7 @@ struct BrowserSettings: View {
     @ViewBuilder
     private var bridgeStatus: some View {
         let listening = FileManager.default.fileExists(atPath: AppIdentity.bridgeSocketURL.path)
-        Label(listening ? "Bridge listening" : "Bridge not running", systemImage: listening ? "dot.radiowaves.left.and.right" : "xmark.circle")
+        Label { Text(listening ? "Bridge listening" : "Bridge not running") } icon: { Icon(listening ? .radioTower : .error, size: 13) }
             .font(.callout).foregroundStyle(listening ? .green : .red)
     }
 

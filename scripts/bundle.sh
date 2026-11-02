@@ -33,6 +33,8 @@ if [ -d Resources/AppIcon.icon ]; then
   rm -f "$APP/Contents/Resources/.actool-partial.plist"
 fi
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# Codicon font (loaded by macOS through ATSApplicationFontsPath = Fonts) and its CC BY 4.0 license.
+cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 
 # Ad-hoc signature with hardened runtime. Entitlements are deliberately empty: no sandbox
 # (auto-type later), no library-validation bypass, no dyld env vars, no get-task-allow. A stable identifier keeps the designated

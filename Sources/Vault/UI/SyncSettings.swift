@@ -10,6 +10,10 @@ struct RemoteDraft: Equatable {
         var title: String {
             switch self { case .off: return "Off"; case .folder: return "Folder"; case .github: return "GitHub" }
         }
+
+        var icon: Codicon {
+            switch self { case .off: return .circleSlash; case .folder: return .folder; case .github: return .github }
+        }
     }
 
     var backend: Backend = .off
@@ -58,17 +62,18 @@ struct RemoteDraftFields: View {
     var tokenSaved = false
 
     var body: some View {
-        Picker("Remote", selection: $draft.backend) {
-            ForEach(RemoteDraft.Backend.allCases.filter { allowOff || $0 != .off }) { Text($0.title).tag($0) }
+        LabeledContent("Remote") {
+            CapsuleSegmented(selection: $draft.backend, options: RemoteDraft.Backend.allCases
+                .filter { allowOff || $0 != .off }
+                .map { .init(value: $0, title: $0.title, icon: $0.icon) })
         }
-        .pickerStyle(.segmented)
         switch draft.backend {
         case .off:
             Text("The vault stays on this Mac only.").foregroundStyle(.secondary)
         case .folder:
-            HStack {
+            HStack(spacing: Theme.Space.s) {
                 TextField("Folder", text: $draft.folderPath, prompt: Text("~/Library/Mobile Documents/com~apple~CloudDocs/Vault"))
-                Button("Choose…") { choose() }
+                PillButton("Choose", icon: .folderOpened, compact: true) { choose() }
             }
             Text("Any synced folder works: iCloud Drive, Dropbox, a network share.").font(.callout).foregroundStyle(.secondary)
         case .github:
@@ -78,7 +83,7 @@ struct RemoteDraftFields: View {
             TextField("Folder in repository (optional)", text: $draft.prefix)
             SecureField("Fine-grained token", text: $draft.token,
                         prompt: Text(tokenSaved ? "saved (encrypted in the vault); paste to replace" : "github_pat_…"))
-            Text("Create the token at github.com → Settings → Developer settings → Fine-grained tokens, limited to this repository with Contents: Read and write. It is stored encrypted next to the vault, never synced.")
+            Text("github.com → Settings → Developer settings → Fine-grained tokens. Limit it to this repository with Contents: Read and write. Stored encrypted next to the vault, never synced.")
                 .font(.callout).foregroundStyle(.secondary)
         }
     }
@@ -118,39 +123,48 @@ struct SyncSettings: View {
     /// Sized to the form of the selected remote so the window never shows empty space.
     private var pageHeight: CGFloat {
         switch draft.backend {
-        case .off: return 200
-        case .folder: return 280
-        case .github: return 420
+        case .off: return 250
+        case .folder: return 330
+        case .github: return 470
         }
     }
 
     private var syncControls: some View {
-        HStack {
-            Button("Test connection") { Task { await test() } }
+        HStack(spacing: Theme.Space.s) {
+            PillButton("Test", icon: .pulse) { Task { await test() } }
                 .disabled(!draft.isComplete || draft.backend == .off || testing)
-            Button("Save") { save() }
+                .help("Check the remote is reachable with these settings")
+            PillButton("Save", icon: .save, kind: .primary) { save() }
                 .disabled(!draft.isComplete || draft == RemoteDraft(sync.config) && draft.token.isEmpty)
             Spacer()
-            Button("Sync now") { Task { await sync.syncNow() } }
+            PillButton("Sync now", icon: .sync) { Task { await sync.syncNow() } }
                 .disabled(!sync.isConfigured || session.state != .unlocked || sync.status == .syncing)
         }
     }
 
-    @ViewBuilder
+    /// One fixed-height row whose icon and text change in place (no spinner swap, no jump).
     private var statusLine: some View {
-        switch sync.status {
-        case .off: EmptyView()
-        case .idle:
-            if let d = sync.lastSyncAt {
-                Text("Last sync \(d.formatted(.relative(presentation: .named)))" + (sync.lastReport.map { " · ↓\($0.pulled) ↑\($0.pushed)" + ($0.conflicts > 0 ? " · \($0.conflicts) conflict(s) merged" : "") } ?? ""))
-                    .font(.callout).foregroundStyle(.secondary)
-            } else {
-                Text("Configured. Runs after the next change or unlock.").font(.callout).foregroundStyle(.secondary)
+        let (icon, text, color): (Codicon, String, Color) = {
+            switch sync.status {
+            case .off: return (.circleSlash, "Sync is off.", .secondary)
+            case .syncing: return (.sync, "Syncing…", .accentColor)
+            case .error(let m): return (.warning, m, .red)
+            case .idle:
+                guard let d = sync.lastSyncAt else { return (.info, "Saved. Syncs after the next change or unlock.", .secondary) }
+                let report = sync.lastReport.map { " · ↓\($0.pulled) ↑\($0.pushed)" + ($0.conflicts > 0 ? " · \($0.conflicts) merged" : "") } ?? ""
+                return (.passFilled, "Synced \(d.formatted(.relative(presentation: .named)))" + report, .green)
             }
-        case .syncing: ProgressView().controlSize(.small)
-        case .error(let m): Label(m, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red)
+        }()
+        return HStack(spacing: Theme.Space.s) {
+            Icon(icon, size: 13)
+                .foregroundStyle(color)
+            Text(text).font(.callout).foregroundStyle(color == .secondary ? .secondary : .primary).lineLimit(2)
+            Spacer(minLength: 0)
         }
+        .frame(minHeight: 32)
+        .animation(.easeOut(duration: 0.15), value: sync.status)
     }
+
 
     private func test() async {
         testing = true
@@ -182,7 +196,7 @@ struct ConnectVaultView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Connect an existing vault").font(.system(size: 16, weight: .semibold)).padding(16)
+            Text("Connect an existing vault").font(Theme.headline).padding(Theme.Space.l)
             Divider()
             Form {
                 Section("Where is it?") { RemoteDraftFields(draft: $draft, allowOff: false) }
@@ -196,9 +210,9 @@ struct ConnectVaultView: View {
             Divider()
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Connect") { Task { await connect() } }
-                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                PillButton("Cancel", icon: .close, kind: .ghost) { dismiss() }.keyboardShortcut(.cancelAction)
+                PillButton("Connect", icon: .cloudDownload, kind: .primary) { Task { await connect() } }
+                    .keyboardShortcut(.defaultAction)
                     .disabled(!draft.isComplete || password.isEmpty || session.busy || (draft.backend == .github && draft.token.isEmpty))
             }
             .padding(14)

@@ -28,15 +28,17 @@ struct MainWindow: View {
                 .searchable(text: $query, placement: .sidebar, prompt: "Search")
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            ForEach(ItemType.allCases, id: \.self) { t in
-                                Button { creatingType = t } label: { Label(t.displayName, systemImage: Theme.symbol(t)) }
+                        MenuButton(title: "New", icon: .add, kind: .primary, compact: true) {
+                            ItemType.allCases.map { t in
+                                MenuItem(title: t.displayName, icon: Theme.icon(t)) { creatingType = t }
                             }
-                        } label: { Label("New", systemImage: "plus") }
+                        }
+                        .help("New item")
                     }
                     ToolbarItem {
-                        Button { session.lock() } label: { Label("Lock", systemImage: "lock") }
+                        PillButton("Lock", icon: .lock, kind: .secondary, compact: true) { session.lock() }
                             .keyboardShortcut("l", modifiers: [.command, .shift])
+                            .help("Lock the vault (⇧⌘L)")
                     }
                 }
                 .sheet(item: $creatingType) { t in
@@ -67,7 +69,7 @@ struct MainWindow: View {
         } else if selection == .home || selection == nil {
             OverviewCards(onSelect: { selection = $0 })
         } else {
-            ContentUnavailableView("Select an item", systemImage: "key.viewfinder")
+            EmptyState(icon: .key, title: "Select an item")
                 .background(Theme.canvas)
         }
     }
@@ -85,10 +87,10 @@ struct Sidebar: View {
     var body: some View {
         List(selection: $selection) {
             Section("Vault") {
-                row(.home, "Overview", "square.grid.2x2", .secureNote, nil)
-                row(.all, "All items", "tray.full", .login, session.items.count)
-                row(.favorites, "Favorites", "star", .apiKey, session.items.filter(\.favorite).count)
-                row(.recent, "Recent", "clock", .dbCredential, nil)
+                row(.home, "Overview", .dashboard, .secureNote, nil)
+                row(.all, "All items", .inbox, .login, session.items.count)
+                row(.favorites, "Favorites", .starFull, .apiKey, session.items.filter(\.favorite).count)
+                row(.recent, "Recent", .history, .dbCredential, nil)
             }
             Section("Types") {
                 ForEach(ItemType.allCases) { t in
@@ -102,7 +104,8 @@ struct Sidebar: View {
             if !tags.isEmpty {
                 Section("Tags") {
                     ForEach(tags, id: \.self) { tag in
-                        Label(tag, systemImage: "tag").tag(SidebarSelection.tag(tag))
+                        Label { Text(tag) } icon: { Icon(.tag, size: 14).foregroundStyle(.secondary) }
+                            .tag(SidebarSelection.tag(tag))
                     }
                 }
             }
@@ -119,7 +122,10 @@ struct Sidebar: View {
                     .help(syncHelp)
                 }
                 Spacer()
-                SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.plain).foregroundStyle(.secondary)
+                SettingsLink { Icon(.settingsGear, size: 14) }
+                    .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 28))
+                    .help("Settings")
+                    .accessibilityLabel("Settings")
             }
             .padding(12)
         }
@@ -151,14 +157,14 @@ struct Sidebar: View {
         return sync.config.displayName
     }
 
-    private func row(_ sel: SidebarSelection, _ title: String, _ symbol: String, _ tint: ItemType, _ n: Int?) -> some View {
+    private func row(_ sel: SidebarSelection, _ title: String, _ icon: Codicon, _ tint: ItemType, _ n: Int?) -> some View {
         Label {
             HStack { Text(title); Spacer(); if let n { count(n) } }
         } icon: {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(Theme.accent(tint))
                 .frame(width: 18, height: 18)
-                .overlay(Image(systemName: symbol).font(.system(size: 9, weight: .bold)).foregroundStyle(.white))
+                .overlay(Icon(icon, size: 11).foregroundStyle(.white))
         }
         .tag(sel)
     }
@@ -224,7 +230,7 @@ struct ItemList: View {
         .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
         .overlay {
             if list.isEmpty {
-                ContentUnavailableView(query.isEmpty ? "No items yet" : "No matches", systemImage: "magnifyingglass")
+                EmptyState(icon: query.isEmpty ? .inbox : .search, title: query.isEmpty ? "No items yet" : "No matches")
             }
         }
     }
@@ -251,7 +257,7 @@ struct ItemRow: View {
                 HStack(spacing: Theme.Space.xs) {
                     Text(item.title).font(Theme.body.weight(.medium)).lineLimit(1)
                     if item.favorite {
-                        Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow)
+                        Icon(.starFull, size: 10).foregroundStyle(.yellow)
                     }
                 }
                 if !subtitle.isEmpty {

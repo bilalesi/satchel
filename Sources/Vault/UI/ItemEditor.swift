@@ -39,15 +39,17 @@ struct ItemEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: Theme.Space.m) {
                 IconTile(type: type, size: 28)
                 Text(existing == nil ? "New \(type.displayName)" : "Edit \(type.displayName)")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Theme.headline)
                 Spacer()
-                Toggle(isOn: $favorite) { Image(systemName: favorite ? "star.fill" : "star") }
-                    .toggleStyle(.button).buttonStyle(.borderless)
+                IconButton(favorite ? .starFull : .starEmpty, help: favorite ? "Remove from favorites" : "Add to favorites") {
+                    favorite.toggle()
+                }
+                .foregroundStyle(favorite ? Color.yellow : Color.secondary)
             }
-            .padding(16)
+            .padding(Theme.Space.l)
             Divider()
             Form {
                 Section {
@@ -65,16 +67,16 @@ struct ItemEditor: View {
                 }
                 Section("Apps") {
                     ForEach(bundleIDs, id: \.self) { b in
-                        HStack {
+                        HStack(spacing: Theme.Space.s) {
+                            if let icon = appIcon(b) { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
                             Text(runningApps.first { $0.id == b }?.name ?? b)
                             Spacer()
-                            Button { bundleIDs.removeAll { $0 == b } } label: { Image(systemName: "minus.circle") }
-                                .buttonStyle(.borderless)
+                            IconButton(.close, help: "Unlink", diameter: 24) { bundleIDs.removeAll { $0 == b } }
                         }
                     }
-                    Menu("Link a running app") {
-                        ForEach(runningApps, id: \.id) { app in
-                            Button(app.name) { if !bundleIDs.contains(app.id) { bundleIDs.append(app.id) } }
+                    MenuButton(title: "Link a running app", icon: .plug, compact: true) {
+                        runningApps.filter { !bundleIDs.contains($0.id) }.map { app in
+                            MenuItem(title: app.name, image: appIcon(app.id)) { bundleIDs.append(app.id) }
                         }
                     }
                     .help("Quick Access shows this item first when that app is in front")
@@ -82,13 +84,13 @@ struct ItemEditor: View {
             }
             .formStyle(.grouped)
             Divider()
-            HStack {
+            HStack(spacing: Theme.Space.s) {
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Save") { save() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                PillButton("Cancel", icon: .close, kind: .ghost) { dismiss() }.keyboardShortcut(.cancelAction)
+                PillButton("Save", icon: .check, kind: .primary) { save() }.keyboardShortcut(.defaultAction)
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .padding(14)
+            .padding(Theme.Space.l)
         }
         .frame(width: 520, height: 560)
         .excludedFromCapture()
@@ -100,7 +102,7 @@ struct ItemEditor: View {
         let binding = Binding(get: { fields[key] ?? "" }, set: { fields[key] = $0 })
         if key == "notes" || key == "privateKey" || key == "publicKey" {
             VStack(alignment: .leading, spacing: 4) {
-                Text(Theme.label(key)).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(Theme.label(key)).font(Theme.caption).foregroundStyle(.secondary)
                 TextEditor(text: binding)
                     .font(.system(size: 12, design: .monospaced))
                     .frame(minHeight: key == "notes" ? 60 : 90)
@@ -113,20 +115,22 @@ struct ItemEditor: View {
                     TextField(Theme.label(key), text: binding).font(.system(size: 13, design: isSecret ? .monospaced : .default))
                 }
                 if isSecret {
-                    Button { if revealed.contains(key) { revealed.remove(key) } else { revealed.insert(key) } } label: {
-                        Image(systemName: revealed.contains(key) ? "eye.slash" : "eye")
+                    IconButton(revealed.contains(key) ? .eyeClosed : .eye, help: revealed.contains(key) ? "Hide" : "Show", diameter: 24) {
+                        if revealed.contains(key) { revealed.remove(key) } else { revealed.insert(key) }
                     }
-                    .buttonStyle(.borderless)
                     if key == "password" || key == "apiKey" || key == "secret" || key == "passphrase" {
-                        Button { fields[key] = PasswordGenerator.generate(); revealed.insert(key) } label: {
-                            Image(systemName: "wand.and.stars")
+                        IconButton(.sparkle, help: "Generate a strong value", diameter: 24) {
+                            fields[key] = PasswordGenerator.generate(); revealed.insert(key)
                         }
-                        .buttonStyle(.borderless)
-                        .help("Generate")
                     }
                 }
             }
         }
+    }
+
+    private func appIcon(_ bundleID: String) -> NSImage? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.icon
+            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map { NSWorkspace.shared.icon(forFile: $0.path) }
     }
 
     private func save() {

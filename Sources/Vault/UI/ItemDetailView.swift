@@ -33,7 +33,7 @@ struct ItemDetailView: View {
                     if !overview.urls.isEmpty || !overview.bundleIDs.isEmpty { linksCard }
                     if !details.history.isEmpty { historyCard(details.history) }
                 } else if let loadError {
-                    Card { Label(loadError, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
+                    Card { Label { Text(loadError) } icon: { Icon(.warning) }.foregroundStyle(.red) }
                 }
                 meta
             }
@@ -67,18 +67,17 @@ struct ItemDetailView: View {
     }
 
     private func actions(labels: Bool) -> some View {
-        HStack(spacing: Theme.Space.s) {
-            Button { rotate() } label: {
-                Label("Rotate", systemImage: "arrow.triangle.2.circlepath").detailLabel(labels)
+        let rotateHelp = "Generate a new \(Theme.label(overview.type.primarySecretField).lowercased()); the old one is kept in history"
+        let canRotate = details != nil && ItemType.secretFieldKeys.contains(overview.type.primarySecretField)
+        return HStack(spacing: Theme.Space.s) {
+            if labels {
+                PillButton("Rotate", icon: .refresh) { rotate() }.help(rotateHelp).disabled(!canRotate)
+                PillButton("Edit", icon: .edit) { onEdit() }.help("Edit this item")
+            } else {
+                IconButton(.refresh, help: "Rotate", kind: .secondary, diameter: 30) { rotate() }.disabled(!canRotate)
+                IconButton(.edit, help: "Edit", kind: .secondary, diameter: 30) { onEdit() }
             }
-            .help("Generate a new \(Theme.label(overview.type.primarySecretField).lowercased()); the old one is kept in history")
-            .disabled(details == nil || !ItemType.secretFieldKeys.contains(overview.type.primarySecretField))
-            Button { onEdit() } label: {
-                Label("Edit", systemImage: "pencil").detailLabel(labels)
-            }
-            .help("Edit this item")
-            Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
-                .help("Delete this item")
+            IconButton(.trash, help: "Delete", kind: .danger, diameter: 30) { confirmDelete = true }
         }
         .fixedSize()
     }
@@ -87,31 +86,30 @@ struct ItemDetailView: View {
     private func fieldRow(_ label: String, _ value: String, secret: Bool, key: String = "") -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(label).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(label).font(Theme.caption).foregroundStyle(.secondary)
                 Text(secret && !revealed.contains(key) ? String(repeating: "•", count: min(value.count, 18)) : value)
-                    .font(.system(size: 13, design: secret ? .monospaced : .default))
+                    .font(secret ? Theme.body.monospaced() : Theme.body)
                     .textSelection(.enabled)
                     .lineLimit(key == "notes" || key == "privateKey" ? nil : 2)
             }
             Spacer()
-            HStack(spacing: 4) {
+            // Fixed-size circles: the eye/eye-closed and copy/check swaps never move the row.
+            HStack(spacing: Theme.Space.xs) {
                 if secret {
-                    Button {
+                    IconButton(revealed.contains(key) ? .eyeClosed : .eye, help: revealed.contains(key) ? "Hide" : "Show") {
                         if revealed.contains(key) { revealed.remove(key) } else { revealed.insert(key) }
-                    } label: { Image(systemName: revealed.contains(key) ? "eye.slash" : "eye") }
+                    }
                 }
-                Button {
+                IconButton(copied == label ? .check : .copy, help: copied == label ? "Copied" : "Copy \(label.lowercased())") {
                     session.copy(value)
                     copied = label
                     Task { try? await Task.sleep(for: .seconds(1.5)); if copied == label { copied = nil } }
-                } label: { Image(systemName: copied == label ? "checkmark" : "doc.on.doc") }
+                }
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
         }
         .padding(.horizontal, Theme.Space.l).padding(.vertical, Theme.Space.m)
         .hoverHighlight(radius: 0)
-        .overlay(alignment: .bottom) { Divider().padding(.leading, 14) }
+        .overlay(alignment: .bottom) { Divider().padding(.leading, Theme.Space.l) }
     }
 
     /// Live one-time code with a countdown; copy puts the code (not the seed) on the clipboard.
@@ -121,10 +119,11 @@ struct ItemDetailView: View {
             let left = totp.secondsRemaining(at: ctx.date)
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("One-time code").font(.system(size: 11)).foregroundStyle(.secondary)
-                    HStack(spacing: 10) {
+                    Text("One-time code").font(Theme.caption).foregroundStyle(.secondary)
+                    HStack(spacing: Theme.Space.s) {
                         Text(code.count == 6 ? code.prefix(3) + " " + code.suffix(3) : code)
-                            .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
+                            .font(.system(size: 22, weight: .light)).monospacedDigit()
+                            .contentTransition(.numericText())
                         ZStack {
                             Circle().stroke(Theme.hairline, lineWidth: 3)
                             Circle().trim(from: 0, to: CGFloat(left) / CGFloat(totp.period))
@@ -136,16 +135,15 @@ struct ItemDetailView: View {
                     }
                 }
                 Spacer()
-                Button {
+                IconButton(copied == "One-time code" ? .check : .copy, help: "Copy one-time code") {
                     session.copy(code)
                     copied = "One-time code"
                     Task { try? await Task.sleep(for: .seconds(1.5)); if copied == "One-time code" { copied = nil } }
-                } label: { Image(systemName: copied == "One-time code" ? "checkmark" : "doc.on.doc") }
-                .buttonStyle(.borderless).foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, Theme.Space.l).padding(.vertical, Theme.Space.m)
         .hoverHighlight(radius: 0)
-            .overlay(alignment: .bottom) { Divider().padding(.leading, 14) }
+            .overlay(alignment: .bottom) { Divider().padding(.leading, Theme.Space.l) }
         }
     }
 
@@ -155,7 +153,7 @@ struct ItemDetailView: View {
                 SectionLabel(text: "Where it is used")
                 ForEach(overview.urls, id: \.self) { u in
                     Link(destination: URL(string: u.contains("://") ? u : "https://" + u) ?? URL(fileURLWithPath: "/")) {
-                        Label(u, systemImage: "globe").font(Theme.body)
+                        Label { Text(u) } icon: { Icon(.globe, size: 13) }.font(Theme.body)
                             .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .hoverHighlight()
@@ -163,7 +161,7 @@ struct ItemDetailView: View {
                     .pointerStyle(.link)
                 }
                 ForEach(overview.bundleIDs, id: \.self) { b in
-                    Label(appName(b), systemImage: "app").font(Theme.body)
+                    Label { Text(appName(b)) } icon: { Icon(.extensions, size: 13) }.font(Theme.body)
                         .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
                 }
             }
@@ -181,7 +179,7 @@ struct ItemDetailView: View {
                         Text(rev.changedAt, format: .dateTime.day().month().year().hour().minute())
                             .font(Theme.caption).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Copy") { session.copy(rev.value) }.buttonStyle(.borderless).font(Theme.caption)
+                        PillButton("Copy", icon: .copy, kind: .ghost, compact: true) { session.copy(rev.value) }
                     }
                     .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
                     .hoverHighlight()
@@ -219,9 +217,3 @@ struct ItemDetailView: View {
     }
 }
 
-private extension View {
-    /// System label styles keep the title as the accessibility name even when only the icon shows.
-    @ViewBuilder func detailLabel(_ showTitle: Bool) -> some View {
-        if showTitle { labelStyle(.titleAndIcon) } else { labelStyle(.iconOnly) }
-    }
-}

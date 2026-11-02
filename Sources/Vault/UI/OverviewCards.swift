@@ -63,16 +63,16 @@ struct OverviewCards: View {
 
     @ViewBuilder
     private var summaryCards: some View {
-        SummaryCard(title: "Items", symbol: "tray.full", color: Theme.accent(.login),
+        SummaryCard(title: "Items", icon: .inbox, color: Theme.accent(.login),
                     value: "\(session.items.count)", caption: "\(session.items.filter(\.favorite).count) favorites",
                     footer: nil, action: { onSelect(.all) })
-        SummaryCard(title: "Rotate soon", symbol: "hourglass", color: Theme.accent(.apiKey),
+        SummaryCard(title: "Rotate soon", icon: .history, color: Theme.accent(.apiKey),
                     value: "\(stale.count)", caption: "older than \(Int(Self.staleDays)) days",
                     footer: stale.isEmpty ? "Everything is fresh" : stale.prefix(2).map(\.title).joined(separator: ", "),
                     action: stale.isEmpty ? nil : { onSelect(.recent) })
-        SummaryCard(title: "Sync", symbol: "arrow.triangle.2.circlepath", color: syncColor,
+        SummaryCard(title: "Sync", icon: .sync, color: syncColor,
                     value: syncValue, caption: syncCaption, footer: syncFooter, action: nil)
-        SummaryCard(title: "Security", symbol: "lock.shield", color: Theme.accent(.sshKey),
+        SummaryCard(title: "Security", icon: .shield, color: Theme.accent(.sshKey),
                     value: session.touchIDEnabled ? "Touch ID" : "Password",
                     caption: "Locks after \(AppSettings.autoLockMinutes) min",
                     footer: session.corruptIDs.isEmpty ? "All items readable" : "\(session.corruptIDs.count) unreadable",
@@ -157,7 +157,7 @@ struct OverviewCards: View {
 /// so a row of tiles lines up whatever the text length.
 struct SummaryCard: View {
     let title: String
-    let symbol: String
+    let icon: Codicon
     let color: Color
     let value: String
     let caption: String
@@ -167,9 +167,11 @@ struct SummaryCard: View {
     var body: some View {
         let card = Card(accent: color, interactive: action != nil) {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
-                Label(title, systemImage: symbol)
-                    .font(Theme.headline).foregroundStyle(color)
-                    .labelStyle(.titleAndIcon)
+                HStack(spacing: Theme.Space.s - 2) {
+                    Icon(icon, size: 13)
+                    Text(title)
+                }
+                .font(Theme.headline).foregroundStyle(color)
                 Text(value).font(Theme.hero).lineLimit(1).minimumScaleFactor(0.8)
                 Text(caption).font(Theme.caption).foregroundStyle(.secondary).lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)

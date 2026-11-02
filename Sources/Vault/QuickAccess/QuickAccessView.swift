@@ -40,7 +40,7 @@ struct QuickAccessView: View {
     private var searchUI: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                Icon(.search, size: 16).foregroundStyle(.secondary)
                 TextField(prompt, text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 20, weight: .regular))
@@ -84,13 +84,19 @@ struct QuickAccessView: View {
                 }
                 hint("esc", "close")
                 Spacer()
-                if let typeError {
-                    Label(typeError, systemImage: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(.orange).lineLimit(1)
-                } else if let copiedTitle {
-                    Label("Copied from \(copiedTitle)", systemImage: "checkmark").font(.system(size: 11)).foregroundStyle(.green)
+                // Status yields space to the hints and truncates; the footer height is fixed.
+                Group {
+                    if let typeError {
+                        Label { Text(typeError) } icon: { Icon(.warning, size: 11) }.foregroundStyle(.orange)
+                    } else if let copiedTitle {
+                        Label { Text("Copied from \(copiedTitle)") } icon: { Icon(.check, size: 11) }.foregroundStyle(.green)
+                    }
                 }
+                .font(Theme.caption).lineLimit(1).truncationMode(.middle)
+                .layoutPriority(-1)
             }
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            .padding(.horizontal, Theme.Space.l)
+            .frame(height: 36)
         }
     }
 
@@ -115,7 +121,7 @@ struct QuickAccessView: View {
                     .font(.system(size: 11)).foregroundStyle(isSel ? .white.opacity(0.8) : .secondary)
             }
             Spacer()
-            if item.favorite { Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(isSel ? .white : .yellow) }
+            if item.favorite { Icon(.starFull, size: 11).foregroundStyle(isSel ? .white : .yellow) }
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .foregroundStyle(isSel ? .white : .primary)
@@ -188,7 +194,7 @@ struct QuickAccessView: View {
 
     private var lockedUI: some View {
         HStack(spacing: 12) {
-            Image(systemName: "lock.fill").foregroundStyle(.secondary)
+            Icon(.lock, size: 16).foregroundStyle(.secondary)
             SecureField("Master password to unlock", text: $password)
                 .textFieldStyle(.plain).font(.system(size: 16))
                 .focused($focused)
@@ -196,10 +202,9 @@ struct QuickAccessView: View {
                     Task { await session.unlock(password: password); if session.state == .unlocked { password = ""; selected = results.first?.id } }
                 }
             if session.touchIDEnabled {
-                Button { Task { await session.unlockWithBiometrics() } } label: { Image(systemName: "touchid") }
-                    .buttonStyle(.borderless)
+                PillButton("Touch ID", icon: .unlock, compact: true) { Task { await session.unlockWithBiometrics() } }
             }
-            if session.busy { ProgressView().controlSize(.small) }
+            ProgressView().controlSize(.small).frame(width: 16, height: 16).opacity(session.busy ? 1 : 0) // reserved: no shift
         }
         .padding(16)
     }

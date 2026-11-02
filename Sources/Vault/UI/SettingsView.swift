@@ -11,19 +11,19 @@ struct SettingsView: View {
     var body: some View {
         TabView(selection: $tab) {
             GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
+                .tabItem { Label { Text("General") } icon: { Image(nsImage: Codicon.settingsGear.image()) } }
                 .tag(Tab.general)
             SecuritySettings()
-                .tabItem { Label("Security", systemImage: "lock.shield") }
+                .tabItem { Label { Text("Security") } icon: { Image(nsImage: Codicon.shield.image()) } }
                 .tag(Tab.security)
             SyncSettings()
-                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
+                .tabItem { Label { Text("Sync") } icon: { Image(nsImage: Codicon.sync.image()) } }
                 .tag(Tab.sync)
             BrowserSettings()
-                .tabItem { Label("Browsers", systemImage: "globe") }
+                .tabItem { Label { Text("Browsers") } icon: { Image(nsImage: Codicon.globe.image()) } }
                 .tag(Tab.browsers)
             VaultSettings()
-                .tabItem { Label("Vault", systemImage: "externaldrive") }
+                .tabItem { Label { Text("Vault") } icon: { Image(nsImage: Codicon.archive.image()) } }
                 .tag(Tab.vault)
         }
         .excludedFromCapture()
@@ -53,14 +53,20 @@ struct GeneralSettings: View {
     @State private var axTrusted = AutoType.isTrusted
 
     var body: some View {
-        SettingsPage(height: autoType ? 360 : 260) {
+        SettingsPage(height: autoType ? 390 : 290) {
             Section {
-                Picker("Lock after", selection: $autoLock) {
-                    Text("1 minute").tag(1); Text("5 minutes").tag(5); Text("10 minutes").tag(10)
-                    Text("30 minutes").tag(30); Text("Only on sleep or screen lock").tag(0)
+                LabeledContent("Lock after") {
+                    Dropdown(selection: $autoLock, options: [
+                        .init(value: 1, title: "1 minute"), .init(value: 5, title: "5 minutes"),
+                        .init(value: 10, title: "10 minutes"), .init(value: 30, title: "30 minutes"),
+                        .init(value: 0, title: "Sleep or screen lock", subtitle: "No idle timer"),
+                    ], minWidth: 190)
                 }
-                Picker("Clear clipboard after", selection: $clipboard) {
-                    Text("15 seconds").tag(15); Text("30 seconds").tag(30); Text("60 seconds").tag(60); Text("Never").tag(0)
+                LabeledContent("Clear clipboard after") {
+                    Dropdown(selection: $clipboard, options: [
+                        .init(value: 15, title: "15 seconds"), .init(value: 30, title: "30 seconds"),
+                        .init(value: 60, title: "60 seconds"), .init(value: 0, title: "Never", subtitle: "Not recommended"),
+                    ], minWidth: 190)
                 }
             }
             Section("Quick Access") {
@@ -73,10 +79,10 @@ struct GeneralSettings: View {
                     }
                 if autoType {
                     LabeledContent {
-                        Button("Open System Settings") { AutoType.openSystemSettings() }
+                        PillButton("System Settings", icon: .linkExternal, compact: true) { AutoType.openSystemSettings() }
                     } label: {
-                        Label(axTrusted ? "Accessibility permission granted" : "Accessibility permission missing",
-                              systemImage: axTrusted ? "checkmark.seal.fill" : "exclamationmark.triangle")
+                        Label { Text(axTrusted ? "Accessibility permission granted" : "Accessibility permission missing") }
+                            icon: { Icon(axTrusted ? .verifiedFilled : .warning, size: 13) }
                             .foregroundStyle(axTrusted ? .green : .orange)
                     }
                     Text("Types into the field that is focused in the app in front. Terminal's Secure Keyboard Entry blocks it. After an app update, grant the permission again if asked.")
@@ -123,15 +129,16 @@ struct SecuritySettings: View {
             Text("Touch ID is not available on this Mac.").foregroundStyle(.secondary)
         } else if session.touchIDEnabled {
             LabeledContent {
-                Button("Disable") { session.disableTouchID() }
+                PillButton("Turn off", icon: .close, kind: .danger, compact: true) { session.disableTouchID() }
             } label: {
-                Label("Enabled", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                Label { Text("Enabled") } icon: { Icon(.verifiedFilled, size: 13) }.foregroundStyle(.green)
             }
         } else if session.state == .unlocked {
             LabeledContent {
-                Button("Enable Touch ID…") { askTouchIDPassword = true }.disabled(session.busy)
+                PillButton("Turn on", icon: .unlock, kind: .primary, compact: true) { askTouchIDPassword = true }
+                    .disabled(session.busy)
             } label: {
-                Label("Disabled", systemImage: "touchid").foregroundStyle(.secondary)
+                Label { Text("Off") } icon: { Icon(.circleSlash, size: 13) }.foregroundStyle(.secondary)
             }
             .alert("Confirm your master password", isPresented: $askTouchIDPassword) {
                 SecureField("Master password", text: $touchIDPassword)
@@ -158,7 +165,7 @@ struct SecuritySettings: View {
             SecureField("New password", text: $newPassword)
             SecureField("Confirm new password", text: $confirmPassword)
             LabeledContent {
-                Button("Change password") {
+                PillButton("Change password", icon: .key, kind: .primary, compact: true) {
                     Task {
                         if await session.changePassword(old: oldPassword, new: newPassword) {
                             message = "Password changed."
@@ -189,7 +196,7 @@ struct VaultSettings: View {
     @EnvironmentObject var session: VaultSession
 
     var body: some View {
-        SettingsPage(height: 310) {
+        SettingsPage(height: 340) {
             Section("Location") {
                 LabeledContent("Folder") {
                     Text(session.vaultURL.path)
@@ -197,7 +204,7 @@ struct VaultSettings: View {
                         .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
                 }
                 LabeledContent {
-                    Button("Open in Finder") { NSWorkspace.shared.open(session.vaultURL) }
+                    PillButton("Open in Finder", icon: .folderOpened, compact: true) { NSWorkspace.shared.open(session.vaultURL) }
                 } label: {
                     Text("Everything in this folder is encrypted. Copying it is a backup.")
                         .font(.callout).foregroundStyle(.secondary)
@@ -206,6 +213,10 @@ struct VaultSettings: View {
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")
                 LabeledContent("Items", value: "\(session.items.count)")
+                LabeledContent("Icons") {
+                    Link("Codicons by Microsoft, CC BY 4.0", destination: URL(string: "https://github.com/microsoft/vscode-codicons")!)
+                        .font(.callout)
+                }
             }
         }
     }

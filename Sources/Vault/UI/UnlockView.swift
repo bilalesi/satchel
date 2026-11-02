@@ -38,32 +38,35 @@ struct UnlockView: View {
                                 .onSubmit { Task { await submit() } }
                         }
                     }
-                    .font(.system(size: 14))
+                    .font(Theme.body)
                 }
                 .frame(width: 320)
 
                 HStack(spacing: Theme.Space.s) {
                     if !creating && session.touchIDEnabled {
-                        Button {
-                            Task { await session.unlockWithBiometrics() }
-                        } label: {
-                            Label("Touch ID", systemImage: "touchid")
-                        }
-                        .disabled(session.busy)
+                        PillButton("Touch ID", icon: .unlock) { Task { await session.unlockWithBiometrics() } }
+                            .disabled(session.busy)
                     }
-                    Button(creating ? "Create vault" : "Unlock") { Task { await submit() } }
-                        .keyboardShortcut(.defaultAction)
-                        .buttonStyle(.borderedProminent)
-                        .disabled(session.busy || !valid)
+                    PillButton(creating ? "Create vault" : "Unlock", icon: creating ? .add : .unlock, kind: .primary) {
+                        Task { await submit() }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(session.busy || !valid)
                 }
                 if creating {
-                    Button("Connect an existing vault from GitHub or a folder…") { connecting = true }
-                        .buttonStyle(.link).font(.callout)
+                    PillButton("Connect an existing vault", icon: .cloudDownload, kind: .ghost, compact: true) { connecting = true }
+                        .help("Download a vault from GitHub or a synced folder")
                 }
-                if session.busy { ProgressView().controlSize(.small) }
-                if let err = session.lastError {
-                    Text(err).font(.callout).foregroundStyle(.red).frame(width: 320)
+                // Reserved slot: the spinner and errors appear here without moving anything above.
+                ZStack {
+                    if session.busy {
+                        ProgressView().controlSize(.small)
+                    } else if let err = session.lastError {
+                        Text(err).font(Theme.caption).foregroundStyle(.red)
+                            .multilineTextAlignment(.center).lineLimit(2)
+                    }
                 }
+                .frame(width: 320, height: 32)
             }
             .padding(Theme.Space.xxl + Theme.Space.s)
         }

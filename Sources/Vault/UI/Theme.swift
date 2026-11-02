@@ -40,14 +40,14 @@ enum Theme {
         }
     }
 
-    static func symbol(_ type: ItemType) -> String {
+    static func icon(_ type: ItemType) -> Codicon {
         switch type {
-        case .login: return "person.crop.circle"
-        case .apiKey: return "key"
-        case .dbCredential: return "cylinder.split.1x2"
-        case .webhook: return "link"
-        case .secureNote: return "note.text"
-        case .sshKey: return "terminal"
+        case .login: return .account
+        case .apiKey: return .key
+        case .dbCredential: return .database
+        case .webhook: return .link
+        case .secureNote: return .note
+        case .sshKey: return .terminal
         }
     }
 
@@ -124,9 +124,7 @@ struct IconTile: View {
         RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
             .fill(Theme.accent(type).gradient)
             .frame(width: size, height: size)
-            .overlay(Image(systemName: Theme.symbol(type))
-                .font(.system(size: size * 0.5, weight: .semibold))
-                .foregroundStyle(.white))
+            .overlay(Icon(Theme.icon(type), size: (size * 0.58).rounded()).foregroundStyle(.white))
     }
 }
 
