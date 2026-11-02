@@ -10,6 +10,8 @@ struct TitleBand: View {
     @EnvironmentObject var session: VaultSession
     @Binding var query: String
     @Binding var menuExpanded: Bool
+    /// False when the window is too narrow for the full menu.
+    var canExpand = true
     let onNew: (ItemType) -> Void
     @FocusState private var searchFocused: Bool
 
@@ -18,10 +20,13 @@ struct TitleBand: View {
             WindowDragArea()
             HStack(spacing: Theme.Space.s) {
                 Color.clear.frame(width: 72) // the traffic lights
-                IconButton(menuExpanded ? .layoutSidebarLeft : .layoutSidebarLeftOff,
-                           help: menuExpanded ? "Collapse the menu (⌃⌘S)" : "Expand the menu (⌃⌘S)", diameter: 28) {
+                let shown = menuExpanded && canExpand
+                IconButton(shown ? .layoutSidebarLeft : .layoutSidebarLeftOff,
+                           help: !canExpand ? "Widen the window to open the full menu"
+                               : shown ? "Collapse the menu (⌃⌘S)" : "Expand the menu (⌃⌘S)", diameter: 28) {
                     withAnimation(.snappy(duration: 0.25)) { menuExpanded.toggle() }
                 }
+                .disabled(!canExpand)
                 .keyboardShortcut("s", modifiers: [.command, .control])
                 Spacer(minLength: Theme.Space.l)
                 MenuButton(title: "New", icon: .add, kind: .primary, alignTrailing: true) {

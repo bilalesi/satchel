@@ -21,6 +21,7 @@ struct MainWindow: View {
     @AppStorage("didShowWelcome") private var didShowWelcome = false
     @State private var welcomeStart: Date?
     @State private var uiScale: CGFloat = 1
+    @State private var windowWidth: CGFloat = 1040
 
     var body: some View {
         Group {
@@ -32,7 +33,7 @@ struct MainWindow: View {
         }
         .scaleEffect(welcomeStart == nil ? 1 : uiScale)
         .overlay { if let start = welcomeStart { WelcomeSplash(start: start, onFinish: finishWelcome).ignoresSafeArea() } }
-        .frame(minWidth: 820, minHeight: 520)
+        .frame(minWidth: Responsive.minWindowWidth, minHeight: 480)
         .excludedFromCapture()
         .onChange(of: session.state) { _, s in if s != .unlocked { selectedItem = nil } }
         .onAppear { if shouldPlayWelcome { startWelcome() } }
@@ -69,20 +70,21 @@ struct MainWindow: View {
 
     /// Title band on top, then workspaces, menu, list and detail side by side.
     private var workspace: some View {
-        VStack(spacing: 0) {
-            TitleBand(query: $query, menuExpanded: $menuExpanded) { creatingType = $0 }
+        let layout = Responsive(width: windowWidth, menuExpanded: menuExpanded, preferredList: listWidth)
+        return VStack(spacing: 0) {
+            TitleBand(query: $query, menuExpanded: $menuExpanded, canExpand: layout.canExpandMenu) { creatingType = $0 }
             HStack(spacing: 0) {
                 WorkspaceRail()
                 // Menu, list and detail are separate rounded blocks with a gap between them.
                 HStack(spacing: Theme.blockGap) {
-                    MenuColumn(selection: $selection, expanded: menuExpanded)
+                    MenuColumn(selection: $selection, expanded: layout.menuExpanded)
                     // The handle is the only space between list and detail: one gap, not three.
                     HStack(spacing: 0) {
                         ItemList(filter: selection ?? .home, query: $query, selectedItem: $selectedItem)
-                            .frame(width: listWidth)
+                            .frame(width: layout.listWidth)
                             .block()
-                        SplitHandle(width: $listWidth, range: 280...480)
-                        detail.frame(minWidth: 380, maxWidth: .infinity).block()
+                        SplitHandle(width: Binding(get: { layout.listWidth }, set: { listWidth = $0 }), range: layout.listRange)
+                        detail.frame(minWidth: Responsive.detailMin, maxWidth: .infinity).block()
                     }
                 }
                 .padding(.trailing, Theme.blockGap)
@@ -91,7 +93,9 @@ struct MainWindow: View {
         }
         .background(Theme.stage)
         .ignoresSafeArea(.container, edges: .top)
-        .animation(.snappy(duration: 0.25), value: menuExpanded)
+        // Reason: one width read per layout pass; the columns below are derived from it, not measured again.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
+        .animation(.snappy(duration: 0.25), value: layout.menuExpanded)
         .sheet(item: $creatingType) { t in
             ItemEditor(type: t, overview: nil, details: nil, defaultCategory: currentCategory) { o, d in
                 session.save(o, d)
@@ -121,6 +125,41 @@ struct MainWindow: View {
             EmptyState(icon: .key, title: "Select an item")
         }
     }
+}
+
+/// How the columns share the window's width. The full menu needs room: below `expandBreakpoint` it is
+/// shown as its icon rail whatever was chosen, and the list gives up width before the detail does, so
+/// nothing is ever clipped. At the smallest window the rail, the icon rail, a 240 pt list and the
+/// 340 pt detail still fit.
+@MainActor
+struct Responsive {
+    static let railWidth: CGFloat = 60
+    static let detailMin: CGFloat = 340
+    static let listMin: CGFloat = 240
+    static let listMax: CGFloat = 480
+    static let minWindowWidth: CGFloat = 720
+
+    let width: CGFloat
+    let menuPreference: Bool
+    let preferredList: Double
+
+    init(width: CGFloat, menuExpanded: Bool, preferredList: Double) {
+        self.width = width
+        self.menuPreference = menuExpanded
+        self.preferredList = preferredList
+    }
+
+    /// The expanded menu (232) + a list at its minimum + the detail minimum + the rail and the gaps.
+    static let expandBreakpoint: CGFloat = railWidth + MenuColumn.expandedWidth + listMin + detailMin + Theme.blockGap * 4
+    var canExpandMenu: Bool { width >= Self.expandBreakpoint }
+    var menuExpanded: Bool { menuPreference && canExpandMenu }
+
+    private var menuWidth: CGFloat { menuExpanded ? MenuColumn.expandedWidth : MenuColumn.collapsedWidth }
+    private var listCeiling: CGFloat {
+        max(Self.listMin, min(Self.listMax, width - Self.railWidth - menuWidth - Self.detailMin - Theme.blockGap * 4))
+    }
+    var listRange: ClosedRange<Double> { Double(Self.listMin)...Double(listCeiling) }
+    var listWidth: Double { min(max(preferredList, listRange.lowerBound), listRange.upperBound) }
 }
 
 struct ItemList: View {
