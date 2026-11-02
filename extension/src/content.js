@@ -89,15 +89,15 @@
       :host { all: initial; }
       .box { position: fixed; z-index: 2147483647; left: ${Math.round(r.left)}px; top: ${Math.round(r.bottom + 6)}px;
              min-width: ${Math.max(280, Math.round(r.width))}px; max-width: 380px; padding: 6px;
-             background: #fff; color: #15171a; border: 1px solid rgba(20,24,30,.08); border-radius: 14px;
+             background: #fff; color: #15171a; border: 1px solid rgba(20,24,30,.08); border-radius: 20px;
              box-shadow: 0 12px 32px rgba(20,24,30,.18), 0 2px 6px rgba(20,24,30,.08);
              font: 13px/1.35 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       @media (prefers-color-scheme: dark) { .box { background: #232427; color: #f1f2f4; border-color: rgba(255,255,255,.1); box-shadow: 0 12px 32px rgba(0,0,0,.5); } }
       .head { padding: 4px 8px 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8a9099; }
-      .row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; cursor: pointer; }
+      .row { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 8px; border-radius: 999px; cursor: pointer; }
       .row:hover, .row.sel { background: rgba(20,24,30,.06); }
       @media (prefers-color-scheme: dark) { .row:hover, .row.sel { background: rgba(255,255,255,.08); } }
-      .tile { width: 30px; height: 30px; border-radius: 9px; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
+      .tile { width: 30px; height: 30px; border-radius: 50%; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
       .txt { min-width: 0; flex: 1; }
       .t { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .s { color: #5d636b; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -106,8 +106,8 @@
       .row:hover .fill, .row.sel .fill { opacity: 1; }
       .foot { display: flex; justify-content: space-between; padding: 6px 8px 2px; margin-top: 4px; border-top: 1px solid rgba(20,24,30,.07); font-size: 11px; color: #8a9099; }
       @media (prefers-color-scheme: dark) { .foot { border-color: rgba(255,255,255,.08); } }
-      kbd { font: 10.5px ui-monospace, Menlo, monospace; padding: 0 4px; border: 1px solid rgba(128,128,128,.35); border-radius: 4px; }
-      .lock { padding: 10px 8px; cursor: pointer; border-radius: 10px; font-weight: 600; color: #3378f5; }
+      kbd { font: 10.5px ui-monospace, Menlo, monospace; padding: 0 4px; border: 1px solid rgba(128,128,128,.35); border-radius: 999px; }
+      .lock { padding: 10px 14px; cursor: pointer; border-radius: 999px; font-weight: 600; color: #3378f5; }
       .lock:hover { background: rgba(51,120,245,.1); }
     `;
     const box = document.createElement("div");
