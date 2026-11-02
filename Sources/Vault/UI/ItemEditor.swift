@@ -3,6 +3,8 @@ import VaultCore
 
 struct ItemEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var session: VaultSession
+    @EnvironmentObject var sync: SyncCoordinator
     let type: ItemType
     let existing: ItemOverview?
     let onSave: (ItemOverview, ItemDetails) -> Void
@@ -15,8 +17,10 @@ struct ItemEditor: View {
     @State private var bundleIDs: [String]
     @State private var fields: [String: String]
     @State private var revealed: Set<String> = []
+    @State private var categoryID: UUID?
+    @State private var syncChoice: SyncCoordinator.ItemSyncChoice
 
-    init(type: ItemType, overview: ItemOverview?, details: ItemDetails?, onSave: @escaping (ItemOverview, ItemDetails) -> Void) {
+    init(type: ItemType, overview: ItemOverview?, details: ItemDetails?, defaultCategory: UUID? = nil, syncChoice: SyncCoordinator.ItemSyncChoice = .followCategory, onSave: @escaping (ItemOverview, ItemDetails) -> Void) {
         self.type = type
         self.existing = overview
         self.onSave = onSave
@@ -27,6 +31,8 @@ struct ItemEditor: View {
         _favorite = State(initialValue: overview?.favorite ?? false)
         _bundleIDs = State(initialValue: overview?.bundleIDs ?? [])
         _fields = State(initialValue: details?.fields ?? [:])
+        _categoryID = State(initialValue: overview?.categoryID ?? defaultCategory)
+        _syncChoice = State(initialValue: syncChoice)
     }
 
     var runningApps: [(id: String, name: String)] {
@@ -54,6 +60,19 @@ struct ItemEditor: View {
             Form {
                 Section {
                     TextField("Title", text: $title)
+                    LabeledContent("Category") {
+                        Dropdown(selection: $categoryID, options: [.init(value: nil, title: "None", icon: .circleSlash)]
+                                 + session.categories.map { .init(value: $0.id, title: $0.name, icon: $0.icon) }, minWidth: 190)
+                    }
+                    if sync.isConfigured {
+                        LabeledContent("Sync") {
+                            Dropdown(selection: $syncChoice, options: [
+                                .init(value: .followCategory, title: "Follow the category", icon: .sync),
+                                .init(value: .always, title: "Always sync", icon: .cloudUpload),
+                                .init(value: .never, title: "Keep on this Mac", icon: .lock),
+                            ], minWidth: 190)
+                        }
+                    }
                     if type == .login || type == .dbCredential || type == .apiKey {
                         TextField(type == .apiKey ? "Account / owner" : "Username", text: $username)
                     }
@@ -92,7 +111,7 @@ struct ItemEditor: View {
             }
             .padding(Theme.Space.l)
         }
-        .frame(width: 520, height: 560)
+        .frame(width: 520, height: sync.isConfigured ? 620 : 590)
         .excludedFromCapture()
     }
 
@@ -142,8 +161,10 @@ struct ItemEditor: View {
         o.urls = split(urls)
         o.tags = split(tags)
         o.favorite = favorite
+        o.categoryID = categoryID
         o.bundleIDs = bundleIDs
         let cleaned = fields.filter { !$0.value.isEmpty }
+        sync.setChoice(syncChoice, for: o.id)
         onSave(o, ItemDetails(fields: cleaned, history: []))
         dismiss()
     }

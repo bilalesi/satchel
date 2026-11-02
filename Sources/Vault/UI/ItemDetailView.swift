@@ -55,7 +55,15 @@ struct ItemDetailView: View {
             IconTile(type: overview.type, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(overview.title).font(Theme.title).lineLimit(1)
-                Text(overview.type.displayName).font(Theme.caption).foregroundStyle(Theme.accent(overview.type))
+                HStack(spacing: Theme.Space.xs) {
+                    Text(overview.type.displayName).foregroundStyle(Theme.accent(overview.type))
+                    if let category = session.category(of: overview) {
+                        Text("·").foregroundStyle(.tertiary)
+                        Icon(category.icon, size: 10).foregroundStyle(category.color)
+                        Text(category.name).foregroundStyle(.secondary)
+                    }
+                }
+                .font(Theme.caption)
             }
             .layoutPriority(1)
             Spacer(minLength: Theme.Space.s)

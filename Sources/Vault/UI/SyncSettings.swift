@@ -200,12 +200,36 @@ struct SyncSettings: View {
                 statusLine
                 if let message { Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
             }
+            if sync.isConfigured { whatToSync }
         }
         .animation(.easeOut(duration: 0.2), value: draft.backend)
         .onAppear { draft = RemoteDraft(sync.config) }
     }
 
-    private var pageHeight: CGFloat { draft.settingsHeight + (sync.isConfigured ? 150 : 0) }
+    private var pageHeight: CGFloat { draft.settingsHeight + (sync.isConfigured ? 120 + CGFloat(session.categories.count) * 32 + (sync.selection.itemOverrides.isEmpty ? 0 : 36) : 0) }
+
+    /// Device-local choice of what leaves this Mac.
+    @ViewBuilder private var whatToSync: some View {
+        Section("What to sync on this Mac") {
+            Toggle("Items without a category", isOn: Binding(get: { sync.selection.syncUncategorized },
+                                                             set: { sync.setSyncUncategorized($0) }))
+            ForEach(session.categories) { c in
+                Toggle(isOn: Binding(get: { sync.isSynced(category: c.id) }, set: { sync.setSynced(category: c.id, $0) })) {
+                    Label { Text(c.name) } icon: { CategoryTile(category: c, size: 16) }
+                }
+            }
+            let overrides = sync.selection.itemOverrides.count
+            if overrides > 0 {
+                HStack {
+                    Text("\(overrides) item\(overrides == 1 ? "" : "s") with their own setting").foregroundStyle(.secondary)
+                    Spacer()
+                    PillButton("Reset", icon: .debugRestart, compact: true) { sync.resetItemOverrides() }
+                }
+            }
+            Text("Items left out stay on this Mac and are never uploaded. Items already uploaded stay on the remote; other Macs choose for themselves.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
 
     private var syncControls: some View {
         HStack(spacing: Theme.Space.s) {

@@ -112,6 +112,41 @@ final class SyncCoordinator: ObservableObject {
         } catch { session?.lastError = error.localizedDescription }
     }
 
+    enum ItemSyncChoice: String, CaseIterable { case followCategory, always, never }
+
+    func isSynced(category id: UUID) -> Bool { !selection.excludedCategories.contains(id) }
+
+    func setSynced(category id: UUID, _ on: Bool) {
+        var s = selection
+        if on { s.excludedCategories.remove(id) } else { s.excludedCategories.insert(id) }
+        updateSelection(s)
+    }
+
+    /// Drops every reference to a deleted category.
+    func forget(category id: UUID) { setSynced(category: id, true) }
+
+    func setSyncUncategorized(_ on: Bool) {
+        var s = selection
+        s.syncUncategorized = on
+        updateSelection(s)
+    }
+
+    func choice(for item: UUID) -> ItemSyncChoice {
+        switch selection.itemOverrides[item] { case .some(true): return .always; case .some(false): return .never; case nil: return .followCategory }
+    }
+
+    func setChoice(_ choice: ItemSyncChoice, for item: UUID) {
+        var s = selection
+        switch choice { case .followCategory: s.itemOverrides[item] = nil; case .always: s.itemOverrides[item] = true; case .never: s.itemOverrides[item] = false }
+        updateSelection(s)
+    }
+
+    func resetItemOverrides() {
+        var s = selection
+        s.itemOverrides = [:]
+        updateSelection(s)
+    }
+
     func hasSecret(for config: RemoteConfig) -> Bool {
         guard let name = config.secretName, let store = session?.store, store.isUnlocked else { return false }
         return ((try? store.localSecret(name)) ?? nil) != nil

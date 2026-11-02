@@ -5,21 +5,29 @@ enum SidebarSelection: Hashable {
     case home, all, favorites, recent
     case type(ItemType)
     case tag(String)
+    case category(UUID)
+}
+
+struct CategorySheetRequest: Identifiable {
+    let id = UUID()
+    let existing: CategoryInfo?
 }
 
 struct MainWindow: View {
     @EnvironmentObject var session: VaultSession
+    @EnvironmentObject var sync: SyncCoordinator
     @State private var selection: SidebarSelection? = .home
     @State private var selectedItem: UUID?
     @State private var query = ""
     @State private var editing: ItemOverview?
     @State private var creatingType: ItemType?
+    @State private var categorySheet: CategorySheetRequest?
 
     var body: some View {
         Group {
             if session.state == .unlocked {
                 NavigationSplitView {
-                    Sidebar(selection: $selection)
+                    Sidebar(selection: $selection, onCategory: { categorySheet = $0 })
                 } content: {
                     ItemList(filter: selection ?? .home, query: $query, selectedItem: $selectedItem)
                 } detail: {
@@ -32,7 +40,7 @@ struct MainWindow: View {
                         ToolbarMenuButton(title: "New", icon: .add) {
                             ItemType.userTypes.map { t in
                                 MenuItem(title: t.displayName, icon: Theme.icon(t)) { creatingType = t }
-                            }
+                            } + [MenuItem(title: "Category", icon: .folder) { categorySheet = .init(existing: nil) }]
                         }
                         .buttonStyle(.borderedProminent)
                         .help("New item")
@@ -47,14 +55,19 @@ struct MainWindow: View {
                         .help("Lock the vault (⇧⌘L)")
                     }
                 }
+                .sheet(item: $categorySheet) { request in
+                    CategorySheet(existing: request.existing, synced: request.existing.map { sync.isSynced(category: $0.id) } ?? true) { id in
+                        selection = .category(id)
+                    }
+                }
                 .sheet(item: $creatingType) { t in
-                    ItemEditor(type: t, overview: nil, details: nil) { o, d in
+                    ItemEditor(type: t, overview: nil, details: nil, defaultCategory: currentCategory) { o, d in
                         session.save(o, d)
                         selectedItem = o.id
                     }
                 }
                 .sheet(item: $editing) { o in
-                    ItemEditor(type: o.type, overview: o, details: try? session.details(o.id)) { o2, d2 in
+                    ItemEditor(type: o.type, overview: o, details: try? session.details(o.id), syncChoice: sync.choice(for: o.id)) { o2, d2 in
                         session.save(o2, d2)
                     }
                 }
@@ -65,6 +78,11 @@ struct MainWindow: View {
         .frame(minWidth: 760, minHeight: 520)
         .excludedFromCapture()
         .onChange(of: session.state) { _, s in if s != .unlocked { selectedItem = nil } }
+    }
+
+    private var currentCategory: UUID? {
+        if case .category(let id)? = selection { return id }
+        return nil
     }
 
     @ViewBuilder
@@ -85,6 +103,7 @@ struct Sidebar: View {
     @EnvironmentObject var session: VaultSession
     @EnvironmentObject var sync: SyncCoordinator
     @Binding var selection: SidebarSelection?
+    var onCategory: (CategorySheetRequest) -> Void = { _ in }
 
     var tags: [String] {
         Array(Set(session.items.flatMap(\.tags))).sorted()
@@ -97,6 +116,29 @@ struct Sidebar: View {
                 row(.all, "All items", .inbox, .login, session.items.count)
                 row(.favorites, "Favorites", .starFull, .apiKey, session.items.filter(\.favorite).count)
                 row(.recent, "Recent", .history, .dbCredential, nil)
+            }
+            Section {
+                ForEach(session.categories) { c in
+                    Label {
+                        HStack { Text(c.name).lineLimit(1); Spacer(); count(session.items.filter { $0.categoryID == c.id }.count) }
+                    } icon: { CategoryTile(category: c) }
+                    .tag(SidebarSelection.category(c.id))
+                    .contextMenu {
+                        Button("Edit category…") { onCategory(.init(existing: c)) }
+                        Button(sync.isSynced(category: c.id) ? "Stop syncing on this Mac" : "Sync on this Mac") {
+                            sync.setSynced(category: c.id, !sync.isSynced(category: c.id))
+                        }
+                        Divider()
+                        Button("Delete category…", role: .destructive) { onCategory(.init(existing: c)) }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Categories")
+                    Spacer()
+                    Button { onCategory(.init(existing: nil)) } label: { Icon(.add, size: 11) }
+                        .buttonStyle(.plain).pointerStyle(.link).help("New category").accessibilityLabel("New category")
+                }
             }
             Section("Types") {
                 ForEach(ItemType.userTypes) { t in
@@ -194,6 +236,7 @@ struct ItemList: View {
         case .recent: return Array(base.sorted { $0.updatedAt > $1.updatedAt }.prefix(20))
         case .type(let t): return base.filter { $0.type == t }
         case .tag(let tag): return base.filter { $0.tags.contains(tag) }
+        case .category(let id): return base.filter { $0.categoryID == id }
         }
     }
 
@@ -204,6 +247,7 @@ struct ItemList: View {
         case .recent: return "Recent"
         case .type(let t): return t.displayName
         case .tag(let tag): return "#" + tag
+        case .category(let id): return session.categories.first { $0.id == id }?.name ?? "Category"
         }
     }
 

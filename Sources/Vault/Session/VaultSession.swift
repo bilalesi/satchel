@@ -11,7 +11,9 @@ final class VaultSession: ObservableObject {
     enum State: Equatable { case noVault, locked, unlocked }
 
     @Published private(set) var state: State = .noVault
+    /// Secrets only. Categories are kept apart in `categories`.
     @Published private(set) var items: [ItemOverview] = []
+    @Published private(set) var categories: [CategoryInfo] = []
     @Published private(set) var corruptIDs: [UUID] = []
     @Published private(set) var touchIDEnabled = false
     @Published var lastError: String?
@@ -120,6 +122,7 @@ final class VaultSession: ObservableObject {
         store?.lock()
         sync.vaultLocked()
         items = []
+        categories = []
         index = SearchIndex([])
         state = .locked
     }
@@ -134,7 +137,11 @@ final class VaultSession: ObservableObject {
     func reload() throws {
         guard let store else { return }
         let result = try store.loadOverviews()
-        items = result.items
+        items = result.items.filter { $0.type != .category }
+        categories = result.items.filter { $0.type == .category }.map { o in
+            let fields = (try? store.details(for: o.id).fields) ?? [:]
+            return CategoryInfo(id: o.id, name: o.title, iconName: fields["icon"] ?? "folder", colorName: fields["color"] ?? "blue")
+        }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         corruptIDs = result.corrupt
         index = SearchIndex(items)
         touchIDEnabled = store.hasSecureEnclaveSlot
@@ -196,6 +203,42 @@ final class VaultSession: ObservableObject {
         guard let store else { return }
         do { try store.delete(id: id); try reload(); sync.requestSync(reason: "delete") }
         catch { lastError = error.localizedDescription }
+    }
+
+    /// The category an item belongs to, if it still exists.
+    func category(of item: ItemOverview) -> CategoryInfo? {
+        item.categoryID.flatMap { id in categories.first { $0.id == id } }
+    }
+
+    /// Creates or updates a category. Returns its id.
+    @discardableResult
+    func saveCategory(id: UUID?, name: String, iconName: String, colorName: String) -> UUID? {
+        guard let store else { return nil }
+        let overview = categories.first { $0.id == id }.flatMap { _ in try? store.loadOverviews().items.first { $0.id == id } }
+            ?? ItemOverview(id: id ?? UUID(), type: .category, title: name)
+        var o = overview
+        o.title = name
+        do {
+            try store.save(overview: o, details: ItemDetails(fields: ["icon": iconName, "color": colorName]))
+            try reload()
+            sync.requestSync(reason: "category")
+            return o.id
+        } catch { lastError = error.localizedDescription; return nil }
+    }
+
+    /// Deletes a category; its items stay and become uncategorized.
+    func deleteCategory(_ id: UUID) {
+        guard let store else { return }
+        do {
+            for var item in items where item.categoryID == id {
+                item.categoryID = nil
+                try store.save(overview: item, details: try store.details(for: item.id))
+            }
+            try store.delete(id: id)
+            sync.forget(category: id)
+            try reload()
+            sync.requestSync(reason: "category deleted")
+        } catch { lastError = error.localizedDescription }
     }
 
     func search(_ text: String, frontmostBundleID: String? = nil, limit: Int = 50) -> [ItemOverview] {
