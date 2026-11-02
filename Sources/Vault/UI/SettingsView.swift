@@ -51,11 +51,13 @@ struct GeneralSettings: View {
     @AppStorage(AppSettings.autoLockMinutesKey) private var autoLock = 10
     @AppStorage(AppSettings.clipboardSecondsKey) private var clipboard = 30
     @AppStorage(AppSettings.hotKeyEnabledKey) private var hotKey = true
+    @AppStorage(HotKey.presetKey) private var hotKeyPreset = HotKey.Preset.optionSpace.rawValue
+    @ObservedObject private var hotKeyState = HotKey.shared
     @AppStorage(AppSettings.autoTypeEnabledKey) private var autoType = false
     @State private var axTrusted = AutoType.isTrusted
 
     var body: some View {
-        SettingsPage(height: (autoType ? 390 : 290) + (updates.isAvailable ? 120 : 0)) {
+        SettingsPage(height: (autoType ? 390 : 290) + (updates.isAvailable ? 120 : 0) + (hotKey ? 44 : 0) + (hotKey && hotKeyState.conflict ? 28 : 0)) {
             Section {
                 LabeledContent("Lock after") {
                     Dropdown(selection: $autoLock, options: [
@@ -85,8 +87,18 @@ struct GeneralSettings: View {
                 }
             }
             Section("Quick Access") {
-                Toggle("Open with ⌥ Space", isOn: $hotKey)
+                Toggle("Open from anywhere with a shortcut", isOn: $hotKey)
                     .onChange(of: hotKey) { _, on in HotKey.shared.setEnabled(on) }
+                if hotKey {
+                    LabeledContent("Shortcut") {
+                        Dropdown(selection: $hotKeyPreset, options: HotKey.Preset.allCases.map { .init(value: $0.rawValue, title: $0.title) }, minWidth: 150)
+                            .onChange(of: hotKeyPreset) { _, _ in HotKey.shared.setEnabled(true) }
+                    }
+                    if hotKeyState.conflict {
+                        Label { Text("Another app already uses this shortcut. Pick a different one.") } icon: { Icon(.warning, size: 13) }
+                            .font(.callout).foregroundStyle(.orange)
+                    }
+                }
                 Toggle("Auto-type into other apps (⇧↩)", isOn: $autoType)
                     .onChange(of: autoType) { _, on in
                         if on && !AutoType.isTrusted { AutoType.requestPermission() }
@@ -229,9 +241,10 @@ struct VaultSettings: View {
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")
                 LabeledContent("Items", value: "\(session.items.count)")
-                LabeledContent("Icons") {
-                    Link("Codicons by Microsoft, CC BY 4.0", destination: URL(string: "https://github.com/microsoft/vscode-codicons")!)
-                        .font(.callout)
+                LabeledContent("Open source") {
+                    PillButton("Licenses", icon: .note, compact: true) {
+                        if let url = Bundle.main.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "md") { NSWorkspace.shared.open(url) }
+                    }
                 }
             }
         }

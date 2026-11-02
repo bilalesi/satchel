@@ -4,3 +4,8 @@ build/
 .swiftpm/
 .DS_Store
 Resources/AppIcon.iconset/
+
+extension/dist/
+.vscode/
+.claude/
+*.local

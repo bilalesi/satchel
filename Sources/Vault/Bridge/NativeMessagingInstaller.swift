@@ -35,7 +35,6 @@ enum NativeMessagingInstaller {
         }
 
         var manifestURL: URL { manifestDirectory.appendingPathComponent(AppIdentity.nativeHostName + ".json") }
-        var legacyManifestURL: URL { manifestDirectory.appendingPathComponent(AppIdentity.legacyNativeHostName + ".json") }
 
         /// The browser app exists on this Mac (by bundle id, so a moved app still counts).
         var isInstalled: Bool {
@@ -79,16 +78,11 @@ enum NativeMessagingInstaller {
         try? FileManager.default.removeItem(at: browser.manifestURL)
     }
 
-    /// At launch: manifests that exist but point elsewhere are rewritten for this copy, and
-    /// manifests left by the app's previous name are replaced.
+    /// At launch: manifests that exist but point elsewhere (the app moved or was updated)
+    /// are rewritten for this copy.
     static func refreshStalePaths() {
-        for b in Browser.allCases {
-            if FileManager.default.fileExists(atPath: b.legacyManifestURL.path) {
-                try? FileManager.default.removeItem(at: b.legacyManifestURL)
-                try? install(b)
-            } else if b.manifestPresent && b.manifestStale {
-                try? install(b)
-            }
+        for b in Browser.allCases where b.manifestPresent && b.manifestStale {
+            try? install(b)
         }
     }
 }

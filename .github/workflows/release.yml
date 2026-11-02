@@ -4,10 +4,8 @@ name: Release
 on:
   push:
     branches: [main]
-    # The encrypted vault syncs into this repository (machine-vault/) as commits on main;
-    # those must never trigger a release. Docs-only pushes don't either.
+    # Docs-only pushes don't release.
     paths-ignore:
-      - "machine-vault/**"
       - "docs/**"
       - "**/*.md"
       - ".gitignore"
@@ -22,8 +20,6 @@ concurrency:
 
 jobs:
   release:
-    # Second guard next to paths-ignore: commits written by the app's own sync.
-    if: ${{ !startsWith(github.event.head_commit.message, 'vault:') }}
     runs-on: macos-26
     timeout-minutes: 40
     permissions:
@@ -48,8 +44,7 @@ jobs:
 
       - name: Version
         run: |
-          # Commits that touch the app, not the vault data the app syncs into this repo.
-          COUNT="$(git rev-list --count HEAD -- . ':!machine-vault')"
+          COUNT="$(git rev-list --count HEAD)"
           echo "VERSION=0.1.${COUNT}" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=${COUNT}" >> "$GITHUB_ENV"
 

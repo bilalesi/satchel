@@ -9,7 +9,6 @@ struct VaultApp: App {
     @StateObject private var updates = UpdateManager()
 
     init() {
-        AppIdentity.migrateLegacySupportDirectory() // before anything opens the vault
         AppSettings.registerDefaults()
         let s = VaultSession()
         _session = StateObject(wrappedValue: s)
@@ -36,7 +35,7 @@ struct VaultApp: App {
         }
 
         MenuBarExtra {
-            Button("Quick Access  ⌥ Space") { QuickAccessController.shared.toggle() }
+            Button("Quick Access  \(HotKey.preset.title)") { QuickAccessController.shared.toggle() }
             Button(session.state == .unlocked ? "Lock now" : "Locked") { session.lock() }
                 .disabled(session.state != .unlocked)
             if case .available(let o) = updates.state {
@@ -71,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         guard let session = Self.session else { return }
+        Self.warnIfNotInstalled()
         QuickAccessController.shared.install(session: session)
         let handler = BridgeHandler(session: session)
         Self.bridge = try? BridgeServer { req in await handler.handle(req) }
@@ -81,6 +81,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { n in
             if let w = n.object as? NSWindow { MainActor.assumeIsolated { AppSettings.applyCapturePolicy(to: w) } }
         }
+    }
+
+    /// Running from the DMG (or from a quarantined download) means the app disappears on eject,
+    /// cannot update itself, and browser integration points into a volume that goes away.
+    @MainActor
+    private static func warnIfNotInstalled() {
+        let path = Bundle.main.bundlePath
+        let fromDiskImage = path.hasPrefix("/Volumes/")
+        let translocated = path.contains("/AppTranslocation/")
+        guard fromDiskImage || translocated else { return }
+        let alert = NSAlert()
+        alert.messageText = "Move Satchel to Applications first"
+        alert.informativeText = "Satchel is running from \(fromDiskImage ? "the disk image" : "a temporary location"). Drag it onto the Applications folder, eject the disk image, and open it from there. Your vault is not affected."
+        alert.addButton(withTitle: "Show in Finder")
+        alert.addButton(withTitle: "Continue Anyway")
+        if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
