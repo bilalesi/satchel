@@ -631,7 +631,7 @@ struct InfoTip: View {
         .pointerStyle(.link)
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
-        .help("What is this?")
+        .tooltip("What is this?")
         .accessibilityLabel("What is this?")
         .accessibilityHint(text)
     }
@@ -668,4 +668,26 @@ struct EmptyState: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
+
+// MARK: - Tooltip
+
+/// A tooltip that does not depend on SwiftUI's `.help`: that one does not show on controls that also set
+/// `.pointerStyle(.link)`. This is an AppKit tooltip on a transparent overlay that ignores clicks.
+private struct ToolTipOverlay: NSViewRepresentable {
+    let text: String
+    func makeNSView(context: Context) -> NSView {
+        let v = PassThroughView()
+        v.toolTip = text
+        return v
+    }
+    func updateNSView(_ nsView: NSView, context: Context) { nsView.toolTip = text }
+
+    private final class PassThroughView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+}
+
+extension View {
+    func tooltip(_ text: String) -> some View { overlay(ToolTipOverlay(text: text)) }
 }

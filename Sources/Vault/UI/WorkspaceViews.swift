@@ -51,7 +51,7 @@ struct WorkspaceRail: View {
             .pointerStyle(.link)
             .background(AnchorReader(box: addAnchor))
             .disabled(session.busy)
-            .help("New workspace")
+            .tooltip("New workspace")
             .accessibilityLabel("New workspace")
             Spacer()
         }
@@ -91,7 +91,7 @@ private struct RailTile: View {
         .onHover { hovering = $0 }
         .background(AnchorReader(box: anchor))
         .disabled(session.busy)
-        .help(workspace.name)
+        .tooltip(workspace.name)
         .accessibilityLabel(workspace.name)
         .accessibilityAddTraits(active ? .isSelected : [])
         .contextMenu {
@@ -193,7 +193,7 @@ private struct WorkspaceRow: View {
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
                 .background(AnchorReader(box: anchor))
-                .help("Rename and change look")
+                .tooltip("Rename and change look")
             Text(workspace.name).lineLimit(1)
             Spacer(minLength: Theme.Space.s)
             if workspace.id == session.activeWorkspaceID {

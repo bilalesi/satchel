@@ -313,7 +313,7 @@ private struct UsedTile<Glyph: View>: View {
             Button { NSWorkspace.shared.open(url) } label: { tile }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
-                .help(help)
+                .tooltip(help)
         } else {
             tile.help(help)
         }

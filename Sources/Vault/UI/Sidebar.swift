@@ -225,7 +225,7 @@ private struct CategoryDraftRow: View {
             } label: { LookTile(iconName: draft.iconName, colorName: draft.colorName, size: 18) }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
-                .help("Choose icon and colour")
+                .tooltip("Choose icon and colour")
             TextField("Name, then Return", text: $draft.name)
                 .textFieldStyle(.plain)
                 .focused($focused)
@@ -264,13 +264,13 @@ struct SidebarFooter: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             .background(AnchorReader(box: anchor))
-            .help(syncHelp)
+            .tooltip(syncHelp)
             .accessibilityLabel("\(AppIdentity.name) menu")
             if !vertical { Spacer() }
             UpdateIconButton()
             Button { openSettingsTab(nil) } label: { Icon(.settingsGear, size: 14) }
                 .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 28))
-                .help("Settings")
+                .tooltip("Settings")
                 .accessibilityLabel("Settings")
         }
         .padding(.horizontal, Theme.Space.m)
@@ -386,7 +386,7 @@ struct CollapsedMenu: View {
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
-        .help(title)
+        .tooltip(title)
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

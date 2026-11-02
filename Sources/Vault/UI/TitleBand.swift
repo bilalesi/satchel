@@ -55,7 +55,7 @@ struct TitleBand: View {
                 Text("⌘F").font(Theme.caption).foregroundStyle(.tertiary)
             } else {
                 Button { query = "" } label: { Icon(.close, size: 11).foregroundStyle(.secondary) }
-                    .buttonStyle(.plain).pointerStyle(.link).help("Clear").accessibilityLabel("Clear search")
+                    .buttonStyle(.plain).pointerStyle(.link).tooltip("Clear").accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, Theme.Space.m)

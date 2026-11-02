@@ -31,7 +31,7 @@ struct StylePicker: View {
                     }
                     .buttonStyle(.plain)
                     .pointerStyle(.link)
-                    .help(entry.name.capitalized)
+                    .tooltip(entry.name.capitalized)
                     .accessibilityLabel(entry.name)
                     if index < CategoryStyle.palette.count - 1 { Spacer(minLength: 0) }
                 }
