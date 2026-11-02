@@ -98,7 +98,12 @@ struct ItemEditor: View {
                         }
                     }
                 }
-                Section("Apps") {
+                Section {
+                    if bundleIDs.isEmpty {
+                        EmptyState(icon: .plug, title: "No linked apps",
+                                   message: "Link an app and Quick Access shows this item first when it is in front.")
+                            .frame(height: 88)
+                    }
                     ForEach(bundleIDs, id: \.self) { b in
                         HStack(spacing: Theme.Space.s) {
                             if let icon = appIcon(b) { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
@@ -107,12 +112,18 @@ struct ItemEditor: View {
                             IconButton(.close, help: "Unlink", diameter: 24) { bundleIDs.removeAll { $0 == b } }
                         }
                     }
-                    MenuButton(title: "Link a running app", icon: .plug, compact: true) {
-                        runningApps.filter { !bundleIDs.contains($0.id) }.map { app in
-                            MenuItem(title: app.name, image: appIcon(app.id)) { bundleIDs.append(app.id) }
+                } header: {
+                    // The action sits on the title's line, at the right edge.
+                    HStack {
+                        Text("Apps")
+                        Spacer()
+                        MenuButton(title: "Link a running app", icon: .plug, compact: true, alignTrailing: true) {
+                            runningApps.filter { !bundleIDs.contains($0.id) }.map { app in
+                                MenuItem(title: app.name, image: appIcon(app.id)) { bundleIDs.append(app.id) }
+                            }
                         }
+                        .help("Quick Access shows this item first when that app is in front")
                     }
-                    .help("Quick Access shows this item first when that app is in front")
                 }
             }
             .formStyle(.grouped)
@@ -138,7 +149,11 @@ struct ItemEditor: View {
                 Text(Theme.label(key)).font(Theme.caption).foregroundStyle(.secondary)
                 TextEditor(text: binding)
                     .font(.system(size: 12, design: .monospaced))
-                    .frame(minHeight: key == "notes" ? 60 : 90)
+                    .scrollContentBackground(.hidden) // the system editor paints a square white box
+                    .padding(Theme.Space.s)
+                    .frame(minHeight: key == "notes" ? 72 : 100)
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous).strokeBorder(Theme.hairline))
             }
         } else {
             HStack {
