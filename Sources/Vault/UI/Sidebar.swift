@@ -45,10 +45,10 @@ struct Sidebar: View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 2) {
                 MenuHeader(title: "Vault")
-                MenuRow(selection: $selection, target: .home, title: "Overview") { tile(.dashboard, .secureNote) }
-                MenuRow(selection: $selection, target: .all, title: "All items", count: session.items.count) { tile(.inbox, .login) }
-                MenuRow(selection: $selection, target: .favorites, title: "Favorites", count: session.items.filter(\.favorite).count) { tile(.starFull, .apiKey) }
-                MenuRow(selection: $selection, target: .recent, title: "Recent") { tile(.history, .dbCredential) }
+                MenuRow(selection: $selection, target: .home, title: "Overview", entry: .home) { EntryTile(entry: .home) }
+                MenuRow(selection: $selection, target: .all, title: "All items", count: session.items.count, entry: .all) { EntryTile(entry: .all) }
+                MenuRow(selection: $selection, target: .favorites, title: "Favorites", count: session.items.filter(\.favorite).count, entry: .favorites) { EntryTile(entry: .favorites) }
+                MenuRow(selection: $selection, target: .recent, title: "Recent", entry: .recent) { EntryTile(entry: .recent) }
 
                 MenuHeader(title: "Categories") {
                     Button { startDraft() } label: { Icon(.add, size: 10) }
@@ -67,8 +67,10 @@ struct Sidebar: View {
 
                 MenuHeader(title: "Types")
                 ForEach(ItemType.userTypes) { t in
-                    MenuRow(selection: $selection, target: .type(t), title: t.displayName,
-                            count: session.items.filter { $0.type == t }.count) { IconTile(type: t, size: 18) }
+                    if let entry = MenuEntry(type: t) {
+                        MenuRow(selection: $selection, target: .type(t), title: t.displayName,
+                                count: session.items.filter { $0.type == t }.count, entry: entry) { EntryTile(entry: entry) }
+                    }
                 }
 
                 if !tags.isEmpty {
@@ -86,13 +88,6 @@ struct Sidebar: View {
         .scrollIndicators(.automatic)
         .frame(maxHeight: .infinity)
         .clipped()
-    }
-
-    private func tile(_ icon: Codicon, _ tint: ItemType) -> some View {
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(Theme.accent(tint))
-            .frame(width: 18, height: 18)
-            .overlay(Icon(icon, size: 11).foregroundStyle(.white))
     }
 
     private func startDraft() {
@@ -131,21 +126,38 @@ extension MenuHeader where Accessory == EmptyView {
 }
 
 /// One selectable row of the menu: a leading tile, the title, an optional count. Selected rows are
-/// filled; the row under the pointer is lightly filled.
+/// filled; the row under the pointer is lightly filled. The tile plays its motion when the pointer
+/// arrives and when the row becomes selected. A built-in `entry` can be given another icon and colour
+/// from the row's context menu.
 private struct MenuRow<Leading: View>: View {
     @Binding var selection: SidebarSelection?
     let target: SidebarSelection
     let title: String
     var count: Int?
     var trailing: AnyView?
+    var entry: MenuEntry?
     @ViewBuilder var leading: Leading
     @State private var hovering = false
+    @State private var pulse = 0
+    @State private var anchor = AnchorBox()
+    @ObservedObject private var looks = MenuLookStore.shared
 
     var body: some View {
+        if let entry {
+            row.contextMenu {
+                Button("Change icon and colour…") { MenuLookEditor.show(entry, anchor: anchor.view) }
+                if looks.isCustomised(entry) { Button("Reset to default") { looks.reset(entry) } }
+            }
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         let selected = selection == target
-        Button { selection = target } label: {
+        return Button { selection = target } label: {
             HStack(spacing: Theme.Space.s + 2) {
-                leading
+                leading.environment(\.iconPulse, pulse)
                 Text(title).font(Theme.body).lineLimit(1)
                 if let trailing { trailing }
                 Spacer(minLength: Theme.Space.xs)
@@ -159,8 +171,27 @@ private struct MenuRow<Leading: View>: View {
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
-        .onHover { hovering = $0 }
+        .onHover { hovering = $0; if $0 { pulse += 1 } }
+        .onChange(of: selected) { _, now in if now { pulse += 1 } }
+        .background(AnchorReader(box: anchor))
         .accessibilityAddTraits(selected ? .isSelected : [])
+        #if DEBUG
+        .onAppear { // UI testing only: open this entry's look card at launch
+            guard let entry, ProcessInfo.processInfo.environment["SATCHEL_DEBUG_LOOK_EDITOR"] == entry.rawValue else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { MenuLookEditor.show(entry, anchor: anchor.view) }
+        }
+        #endif
+    }
+}
+
+/// Opens the card that changes a built-in entry's icon and colour, beside the menu.
+enum MenuLookEditor {
+    @MainActor
+    static func show(_ entry: MenuEntry, anchor: NSView?) {
+        guard let anchor else { return }
+        MenuPanelController.shared.showContent(anchor: anchor, placement: .trailing) { close in
+            MenuLookCard(entry: entry, onDone: close)
+        }
     }
 }
 
@@ -179,7 +210,7 @@ private struct CategoryRow: View {
         MenuRow(selection: $selection, target: .category(category.id), title: category.name, count: count,
                 trailing: sync.isConfigured && !synced
                     ? AnyView(Icon(.lock, size: 10).foregroundStyle(.tertiary).help("Stays on this Mac")) : nil) {
-            CategoryTile(category: category)
+            MotionTile(iconName: category.iconName, colorName: category.colorName)
         }
         .background(AnchorReader(box: anchor))
         .contextMenu {
@@ -338,7 +369,8 @@ struct SidebarFooter: View {
 
 
 /// The menu when collapsed: a slim rail of icons, like the left rail of the Codex app. The same
-/// choices as the full menu, one glyph each, with the name in the tooltip.
+/// choices as the full menu, one glyph each, with the name in the tooltip. The glyphs play their motion
+/// like the tiles of the full menu, and wear the same icon and colour.
 struct CollapsedMenu: View {
     @EnvironmentObject var session: VaultSession
     @Binding var selection: SidebarSelection?
@@ -347,19 +379,20 @@ struct CollapsedMenu: View {
         VStack(spacing: 0) {
             ScrollView(.vertical) {
                 VStack(spacing: Theme.Space.xs) {
-                    item(.home, .dashboard, "Overview")
-                    item(.all, .inbox, "All items")
-                    item(.favorites, .starFull, "Favorites")
-                    item(.recent, .history, "Recent")
+                    ForEach([MenuEntry.home, .all, .favorites, .recent]) { entry in
+                        RailItem(selection: $selection, target: selection(of: entry), title: entry.title, entry: entry)
+                    }
                     if !session.categories.isEmpty {
                         rule
                         ForEach(session.categories) { c in
-                            item(.category(c.id), c.icon, c.name, tint: c.color)
+                            RailItem(selection: $selection, target: .category(c.id), title: c.name, iconName: c.iconName, colorName: c.colorName)
                         }
                     }
                     rule
                     ForEach(ItemType.userTypes) { t in
-                        item(.type(t), Theme.icon(t), t.displayName, tint: Theme.accent(t))
+                        if let entry = MenuEntry(type: t) {
+                            RailItem(selection: $selection, target: .type(t), title: t.displayName, entry: entry)
+                        }
                     }
                 }
                 .padding(.vertical, Theme.Space.s)
@@ -370,25 +403,60 @@ struct CollapsedMenu: View {
         }
     }
 
+    private func selection(of entry: MenuEntry) -> SidebarSelection {
+        switch entry {
+        case .home: return .home
+        case .all: return .all
+        case .favorites: return .favorites
+        default: return .recent
+        }
+    }
+
     private var rule: some View {
         Divider().padding(.horizontal, Theme.Space.m).padding(.vertical, Theme.Space.xs)
     }
+}
 
-    private func item(_ sel: SidebarSelection, _ icon: Codicon, _ title: String, tint: Color? = nil) -> some View {
-        let selected = selection == sel
-        return Button { selection = sel } label: {
-            Icon(icon, size: 15)
-                .foregroundStyle(tint ?? (selected ? Color.primary : Color.secondary))
+/// One icon of the collapsed rail. A built-in entry takes its look from the store (and can be changed from
+/// the context menu); a category brings its own.
+private struct RailItem: View {
+    @Binding var selection: SidebarSelection?
+    let target: SidebarSelection
+    let title: String
+    var entry: MenuEntry?
+    var iconName = ""
+    var colorName = ""
+    @ObservedObject private var looks = MenuLookStore.shared
+    @State private var hovering = false
+    @State private var pulse = 0
+    @State private var anchor = AnchorBox()
+
+    var body: some View {
+        let selected = selection == target
+        let look = entry.map { looks.look($0) } ?? MenuLook(icon: iconName, color: colorName)
+        Button { selection = target } label: {
+            MotionGlyph(iconName: look.icon, size: 15)
+                .environment(\.iconPulse, pulse)
+                .foregroundStyle(CategoryStyle.color(named: look.color))
                 .frame(width: 36, height: 34)
-                .background(selected ? Color.primary.opacity(0.10) : .clear,
+                .background(selected ? Color.primary.opacity(0.10) : (hovering ? Color.primary.opacity(0.05) : .clear),
                             in: RoundedRectangle(cornerRadius: Theme.rowRadius + 2, style: .continuous))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
+        .onHover { hovering = $0; if $0 { pulse += 1 } }
+        .onChange(of: selected) { _, now in if now { pulse += 1 } }
+        .background(AnchorReader(box: anchor))
         .tooltip(title)
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
+        .contextMenu {
+            if let entry {
+                Button("Change icon and colour…") { MenuLookEditor.show(entry, anchor: anchor.view) }
+                if looks.isCustomised(entry) { Button("Reset to default") { looks.reset(entry) } }
+            }
+        }
     }
 }
 

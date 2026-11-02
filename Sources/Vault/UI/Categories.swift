@@ -18,6 +18,7 @@ enum CategoryStyle {
         .folder, .briefcase, .home, .heart, .bookmark, .rocket, .flame, .globe, .key, .shield, .database, .server,
         .cloud, .terminal, .law, .mail, .creditCard, .gift, .book, .beaker, .organization, .layers, .tools,
         .library, .game, .mortarBoard, .lightbulb, .coffee, .package,
+        .dashboard, .inbox, .starFull, .history, .account, .link, .note,
     ]
 
     static let palette: [(name: String, color: Color)] = [
