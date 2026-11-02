@@ -7,6 +7,14 @@ struct BrowserSettings: View {
     @State private var message: String?
 
     var body: some View {
+        SettingsPage(height: 520) {
+            Section("Connection") { browsers }
+            Section("Extension") { extensionFolder }
+        }
+    }
+
+    @ViewBuilder
+    private var browsers: some View {
         ForEach(NativeMessagingInstaller.Browser.allCases.filter(\.isInstalled)) { b in
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -28,7 +36,6 @@ struct BrowserSettings: View {
             Text("No supported browser found (Dia, Arc, Chrome, Firefox).").foregroundStyle(.secondary)
         }
         bridgeStatus
-        extensionFolder
         if let message { Text(message).font(.callout).foregroundStyle(.secondary) }
     }
 
@@ -67,13 +74,10 @@ struct BrowserSettings: View {
     @ViewBuilder
     private var extensionFolder: some View {
         if let dist = BrowserIntegration.extensionDistURL, FileManager.default.fileExists(atPath: dist.path) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Load the extension").font(.callout.weight(.semibold))
-                Text("Dia, Arc, Chrome: open chrome://extensions (in Dia: dia://extensions), turn on Developer mode, click “Load unpacked”, press ⌘⇧G in the file dialog and paste the chromium folder path. Firefox: about:debugging → This Firefox → Load Temporary Add-on → manifest.json in the firefox folder (sign it as unlisted on addons.mozilla.org for a permanent install).")
-                    .font(.callout).foregroundStyle(.secondary)
-                folderRow("Chromium folder", dist.appendingPathComponent("chromium", isDirectory: true))
-                folderRow("Firefox folder", dist.appendingPathComponent("firefox", isDirectory: true))
-            }
+            folderRow("Dia, Arc, Chrome", dist.appendingPathComponent("chromium", isDirectory: true))
+            folderRow("Firefox", dist.appendingPathComponent("firefox", isDirectory: true))
+            Text("Extensions page → Developer mode → Load unpacked → ⌘⇧G and paste the path. Firefox: about:debugging → Load Temporary Add-on → manifest.json.")
+                .font(.callout).foregroundStyle(.secondary)
         } else {
             Text("Extension files are not inside this build. Run scripts/bundle.sh.").font(.callout).foregroundStyle(.secondary)
         }

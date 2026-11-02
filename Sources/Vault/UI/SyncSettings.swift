@@ -101,13 +101,27 @@ struct SyncSettings: View {
     @State private var testing = false
 
     var body: some View {
-        Group {
-            RemoteDraftFields(draft: $draft, tokenSaved: sync.hasToken)
-            syncControls
-            statusLine
-            if let message { Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
+        SettingsPage(height: pageHeight) {
+            Section {
+                RemoteDraftFields(draft: $draft, tokenSaved: sync.hasToken)
+            }
+            Section {
+                syncControls
+                statusLine
+                if let message { Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: draft.backend)
         .onAppear { draft = RemoteDraft(sync.config) }
+    }
+
+    /// Sized to the form of the selected remote so the window never shows empty space.
+    private var pageHeight: CGFloat {
+        switch draft.backend {
+        case .off: return 200
+        case .folder: return 280
+        case .github: return 420
+        }
     }
 
     private var syncControls: some View {
