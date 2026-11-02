@@ -28,7 +28,15 @@ UNIVERSAL=1 VERSION=0.1.0 scripts/make-dmg.sh   # → build/Satchel-0.1.0.dmg
 
 Notarized releases would need an Apple Developer ID certificate and a notarytool credential stored as repository secrets, plus two extra workflow steps (sign with the certificate, `xcrun notarytool submit --wait`, `xcrun stapler staple`). Not set up.
 
-**Keep the vault out of this repository.** The sync folder `machine-vault/` shares the `main` branch with the source, so its commits interleave with yours and a plain push is rejected until you `git pull --rebase`. Prefer a separate private repository for the vault (Settings → Sync).
+**Keep the vault out of this repository.** The vault belongs in its own private repository (this project's owner uses `satchel-vault`). If it shares `main` with the source, its `vault: …` commits interleave with yours and a plain push is rejected until you `git pull --rebase`.
+
+Moving an existing vault to its own repository:
+
+1. Create a private repository (with a README, so `main` exists).
+2. GitHub → Settings → Developer settings → Fine-grained tokens → your token → Repository access → add the new repository (Contents: Read and write). The token itself does not change.
+3. Satchel → Settings → Sync → set the repository name, leave **Folder in repository** empty, click **Test connection**, then **Save**. The first sync uploads the whole vault.
+4. Other Macs: Settings → Sync, same fields.
+5. Remove the old copy: `git rm -r machine-vault && git commit -m "chore: vault moved to its own repository" && git push` (the commit touches only the ignored folder, so it releases nothing). The old ciphertext stays in git history; it is encrypted, and the repository is private.
 
 ## Build from source
 
