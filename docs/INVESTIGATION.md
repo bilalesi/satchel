@@ -400,6 +400,19 @@ Testing per phase: unit tests for crypto round-trips and AAD tampering (must fai
 
 ---
 
+## 11.2 Build status (2026-11-02)
+
+| Phase | State |
+|---|---|
+| 1 Core vault, Touch ID, Quick Access | built, owner-confirmed |
+| 2 Sync (GitHub, folder) | built, owner-confirmed |
+| 4 Extension (Dia, Arc, Chrome, Firefox) | built, owner-confirmed in Dia |
+| 5 Auto-type | built, owner-confirmed |
+| One-time codes (RFC 6238) | built |
+| Independent security review | done; 8 findings fixed with tests (synthetic-event fills, header/manifest consistency, withheld remote items, keystroke target re-check, lossless merge, sync.json integrity, GitHub listing cap, generated-password clipboard) |
+| 3 Safari credential provider | waiting for a paid Apple Developer account |
+| S3 backend, KDBX/1PUX import, product name | not started |
+
 ## 12. Sources
 
 Apple
