@@ -1,6 +1,6 @@
 # Third-party notices
 
-Satchel includes or links the following. Each keeps its own license.
+Satchel itself is licensed under the PolyForm Noncommercial License 1.0.0 (see `LICENSE`). It includes or links the following, and each keeps its own license.
 
 | Component | Used for | License |
 |---|---|---|

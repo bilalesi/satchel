@@ -104,6 +104,12 @@ Without the secret the release is published unsigned and installed apps ignore i
 
 Never put your own vault into this repository. Use a separate private repository for sync.
 
+## License
+
+Satchel is **source-available for noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, study, change and share it for personal use, hobby projects, research, education, and inside charities, schools and public institutions. You may not use it for a commercial purpose, for example at a company for work, or inside a product or service you sell. For commercial use, contact the author through the GitHub profile.
+
+This is not an "open source" license in the strict sense of the Open Source Initiative, because it limits commercial use. The third-party components keep their own licenses (see below).
+
 ## Credits
 
 Cryptography by [libsodium](https://libsodium.org). Icons: [Codicons](https://github.com/microsoft/vscode-codicons) by Microsoft (CC BY 4.0). Site matching uses the [Public Suffix List](https://publicsuffix.org). Full notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
