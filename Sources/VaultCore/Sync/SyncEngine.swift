@@ -38,6 +38,7 @@ public final class SyncEngine: Sendable {
     // MARK: One round
 
     private func round(_ report: inout SyncReport) async throws {
+        let reportAtStart = report // a retried run accumulates; "nothing changed" is judged per round
         let state = try store.loadSyncState()
         let localManifest = store.manifest
 
@@ -114,13 +115,28 @@ public final class SyncEngine: Sendable {
             _ = try await remote.put(RemotePaths.header, data: data, ifMatch: etag)
         }
 
-        var next = Manifest(generation: max(localManifest.generation, remoteManifest.generation) + 1,
+        let currentHeaderHash = ManifestFile.sha256(try store.headerData())
+
+        // Nothing moved in either direction and the remote manifest already describes exactly
+        // this state: do not write it again. Reason: every manifest write is a commit/object
+        // version on the remote; the 15-minute timer alone would add ~96 a day for no change.
+        let unchanged = report == reportAtStart
+            && headerPush == nil
+            && merged == remoteManifest.versions
+            && remoteManifest.headerHash == currentHeaderHash
+        let next: Manifest
+        if unchanged {
+            next = Manifest(generation: remoteManifest.generation, deviceID: localManifest.deviceID,
+                            headerHash: currentHeaderHash, versions: merged)
+            try store.replaceManifest(next) // adopt the remote generation locally; no remote write
+        } else {
+            next = Manifest(generation: max(localManifest.generation, remoteManifest.generation) + 1,
                             deviceID: localManifest.deviceID,
-                            headerHash: ManifestFile.sha256(try store.headerData()),
+                            headerHash: currentHeaderHash,
                             versions: merged)
-        next.deviceID = localManifest.deviceID
-        _ = try await remote.put(RemotePaths.manifest, data: try store.encodeManifest(next), ifMatch: remoteManifestObj.etag)
-        try store.replaceManifest(next)
+            _ = try await remote.put(RemotePaths.manifest, data: try store.encodeManifest(next), ifMatch: remoteManifestObj.etag)
+            try store.replaceManifest(next)
+        }
 
         var newState = state
         newState.lastGeneration = next.generation

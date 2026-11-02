@@ -65,8 +65,38 @@ final class SyncEngineTests: XCTestCase {
         remote.resetCounters()
         let again = try await sync(b)
         XCTAssertEqual(again.pulled + again.pushed, 0)
-        XCTAssertEqual(remote.puts, ["manifest.vman"])
+        XCTAssertEqual(remote.puts, [], "an unchanged vault must not produce any remote write")
+        XCTAssertEqual(again.generation, a.manifest.generation)
         XCTAssertFalse(remote.gets.contains { $0.hasPrefix("items/") })
+    }
+
+    func testNoOpSyncsNeverWriteAndChangesStillDo() async throws {
+        let a = try makeA()
+        let (o, d) = login("Gmail", "1")
+        try a.save(overview: o, details: d)
+        try await sync(a)
+        let generation = a.manifest.generation
+        remote.resetCounters()
+        for _ in 0..<5 { try await sync(a) }
+        XCTAssertEqual(remote.puts, [])
+        XCTAssertEqual(a.manifest.generation, generation)
+        XCTAssertEqual(try a.loadSyncState().lastGeneration, generation)
+        XCTAssertNotNil(try a.loadSyncState().lastSyncAt)
+
+        // A real change writes the item and the manifest once, and bumps the generation.
+        try a.save(overview: o, details: ItemDetails(fields: ["password": "2"]))
+        remote.resetCounters()
+        let r = try await sync(a)
+        XCTAssertEqual(r.pushed, 1)
+        XCTAssertEqual(remote.puts.filter { $0 == "manifest.vman" }.count, 1)
+        XCTAssertGreaterThan(a.manifest.generation, generation)
+
+        // A second Mac that was behind adopts the generation without writing anything.
+        let b = try await bootstrapB()
+        remote.resetCounters()
+        try await sync(b)
+        XCTAssertEqual(remote.puts, [])
+        XCTAssertEqual(b.manifest.generation, a.manifest.generation)
     }
 
     func testBootstrapWrongPasswordLeavesNothing() async throws {
@@ -217,11 +247,13 @@ final class SyncEngineTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(3))
         try a.changePassword(old: pw, new: SecureBytes(utf8: "new one"), kdfParams: cheap)
         try await sync(a)
-        remote.failPutsAfter = 0 // B applies the new header, then the manifest put fails
+        // B has a local change to push, so its round applies the new header and then fails on the put.
+        try b.save(overview: login("Y", "y").0, details: login("Y", "y").1)
+        remote.failPutsAfter = 0
         do { try await sync(b); XCTFail() } catch { XCTAssertEqual(error as? SyncError, .network("injected")) }
         b.lock()
         try b.unlock(password: SecureBytes(utf8: "new one")) // header and manifest on disk still agree
-        XCTAssertEqual(try b.loadOverviews().items.count, 1)
+        XCTAssertEqual(try b.loadOverviews().items.count, 2)
     }
 
     func testTamperedRemoteManifestRejected() async throws {
