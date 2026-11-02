@@ -26,6 +26,8 @@ public protocol RemoteStore: Sendable {
     func list(prefix: String) async throws -> [String: String]
     /// Removes an object. A missing object is not an error. `ifMatch == nil` deletes whatever is there.
     func delete(_ path: String, ifMatch: String?) async throws
+    /// See `defaultProbe()`. A backend may override it (Git wraps it in one batch).
+    func probeConditionalWrites() async throws -> ProbeResult
 }
 
 /// A backend that can stage several writes and publish them together (Git: one commit and one
@@ -43,10 +45,12 @@ public enum ProbeResult: Equatable, Sendable {
 }
 
 public extension RemoteStore {
+    func probeConditionalWrites() async throws -> ProbeResult { try await defaultProbe() }
+
     /// Proves the server really enforces conditional writes, which the sync engine relies on to
     /// avoid lost updates. Writes, overwrites and removes one scratch object under `items/`
     /// (a name that is not an item id, so it is ignored by sync).
-    func probeConditionalWrites() async throws -> ProbeResult {
+    func defaultProbe() async throws -> ProbeResult {
         let path = RemotePaths.itemsPrefix + ".probe-" + UUID().uuidString.lowercased()
         do {
             let first = try await put(path, data: Data("a".utf8), ifMatch: nil)

@@ -262,6 +262,23 @@ public final class SyncEngine: Sendable {
 
     // MARK: Second device
 
+    private struct Download: Sendable {
+        var header: RemoteObject
+        var manifest: RemoteObject
+        var items: [(UUID, String, RemoteObject)]
+    }
+
+    private static func downloadAll(_ remote: RemoteStore) async throws -> Download {
+        guard let header = try await remote.get(RemotePaths.header) else { throw SyncError.notFound(RemotePaths.header) }
+        guard let manifest = try await remote.get(RemotePaths.manifest) else { throw SyncError.notFound(RemotePaths.manifest) }
+        var items: [(UUID, String, RemoteObject)] = []
+        for (path, _) in try await remote.list(prefix: RemotePaths.itemsPrefix) {
+            guard let id = RemotePaths.itemID(fromPath: path), let obj = try await remote.get(path) else { continue }
+            items.append((id, path, obj))
+        }
+        return Download(header: header, manifest: manifest, items: items)
+    }
+
     /// Downloads a remote vault into `url` and unlocks it. On any failure nothing is left behind.
     public static func bootstrap(remote: RemoteStore, into url: URL, password: SecureBytes,
                                  deviceID: UUID = DeviceID.current) async throws -> VaultStore {
@@ -273,13 +290,15 @@ public final class SyncEngine: Sendable {
         do {
             try fm.createDirectory(at: staging.appendingPathComponent("items", isDirectory: true),
                                    withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            guard let header = try await remote.get(RemotePaths.header) else { throw SyncError.notFound(RemotePaths.header) }
-            guard let manifest = try await remote.get(RemotePaths.manifest) else { throw SyncError.notFound(RemotePaths.manifest) }
-            try AtomicFile.write(header.data, to: staging.appendingPathComponent(RemotePaths.header))
-            try AtomicFile.write(manifest.data, to: staging.appendingPathComponent(RemotePaths.manifest))
-            for (path, _) in try await remote.list(prefix: RemotePaths.itemsPrefix) {
-                guard let id = RemotePaths.itemID(fromPath: path) else { continue }
-                guard let obj = try await remote.get(path) else { continue }
+            let download: Download
+            if let batching = remote as? BatchingRemoteStore {
+                download = try await batching.withBatch { try await downloadAll(remote) }
+            } else {
+                download = try await downloadAll(remote)
+            }
+            try AtomicFile.write(download.header.data, to: staging.appendingPathComponent(RemotePaths.header))
+            try AtomicFile.write(download.manifest.data, to: staging.appendingPathComponent(RemotePaths.manifest))
+            for (id, path, obj) in download.items {
                 try AtomicFile.write(obj.data, to: staging.appendingPathComponent(RemotePaths.item(id)))
                 state.record(path: path, etag: obj.etag, data: obj.data) // so the first sync does not re-upload everything
             }
