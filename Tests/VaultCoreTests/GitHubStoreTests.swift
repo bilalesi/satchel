@@ -47,13 +47,40 @@ final class GitHubStoreTests: XCTestCase {
     }
 
     func testGetParsesShaAndBase64AndSendsHeaders() async throws {
-        StubURLProtocol.handler = { _ in (200, self.json(#"{"sha":"abc123","encoding":"base64","content":"aGVs\nbG8=\n"}"#)) }
+        let sha = GitBlob.sha(Data("hello".utf8))
+        StubURLProtocol.handler = { _ in (200, self.json(#"{"sha":"\#(sha)","encoding":"base64","content":"aGVs\nbG8=\n"}"#)) }
         let obj = try await store.get("manifest.vman")
-        XCTAssertEqual(obj, RemoteObject(data: Data("hello".utf8), etag: "abc123"))
+        XCTAssertEqual(obj, RemoteObject(data: Data("hello".utf8), etag: sha))
         let req = StubURLProtocol.requests[0]
         XCTAssertEqual(req.url?.absoluteString, "https://api.github.com/repos/me/secrets/contents/vault/manifest.vman?ref=main")
         XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer ghp_test")
         XCTAssertEqual(req.value(forHTTPHeaderField: "X-GitHub-Api-Version"), "2022-11-28")
+    }
+
+    func testTranscodedContentFallsBackToExactBlob() async throws {
+        // Reproduces GitHub's behavior seen on the real manifest: the contents API returns
+        // re-encoded bytes, the blob API returns the stored ones.
+        let stored = Data("{\"a\":1}".utf8) + Data([0xC6, 0x92, 0xFF, 0x00, 0x80])
+        let sha = GitBlob.sha(stored)
+        let mangled = Data(String(decoding: stored, as: Unicode.ASCII.self).utf8) // not equal to stored
+        StubURLProtocol.handler = { req in
+            if req.url!.path.contains("/git/blobs/") {
+                return (200, self.json(#"{"sha":"\#(sha)","encoding":"base64","content":"\#(stored.base64EncodedString())"}"#))
+            }
+            return (200, self.json(#"{"sha":"\#(sha)","encoding":"base64","content":"\#(mangled.base64EncodedString())"}"#))
+        }
+        let obj = try await store.get("manifest.vman")
+        XCTAssertEqual(obj, RemoteObject(data: stored, etag: sha))
+        XCTAssertEqual(StubURLProtocol.requests.count, 2)
+        XCTAssertEqual(StubURLProtocol.requests[1].url?.path, "/repos/me/secrets/git/blobs/\(sha)")
+    }
+
+    func testIntegrityFailureIsAnError() async {
+        StubURLProtocol.handler = { _ in (200, self.json(#"{"sha":"0000000000000000000000000000000000000000","encoding":"base64","content":"aGVsbG8="}"#)) }
+        do { _ = try await store.get("manifest.vman"); XCTFail() } catch {
+            guard case .remote(_, let message)? = error as? SyncError else { return XCTFail("\(error)") }
+            XCTAssertTrue(message.contains("integrity"))
+        }
     }
 
     func testAbsentIs404Nil() async throws {

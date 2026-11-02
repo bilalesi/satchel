@@ -70,12 +70,22 @@ final class SyncCoordinator: ObservableObject {
     }
 
     func syncNow() async {
-        guard let session, let store = session.store, store.isUnlocked, isConfigured else { return }
+        guard session?.store?.isUnlocked == true, isConfigured else { return }
         if running { dirty = true; return }
         running = true
-        status = .syncing
         defer { running = false }
-        Self.log.info("sync start: \(self.config.displayName, privacy: .public)")
+        // A request that arrives during a run is not dropped: run again until none is pending.
+        repeat {
+            dirty = false
+            await runOnce()
+        } while dirty && session?.store?.isUnlocked == true
+    }
+
+    private func runOnce() async {
+        guard let session, let store = session.store, store.isUnlocked else { return }
+        status = .syncing
+        // .notice is persisted by the unified log; .info is not (kept for diagnosis).
+        Self.log.notice("sync start: \(self.config.displayName, privacy: .public)")
         do {
             let config = self.config
             // Token lookup and the whole run stay off the main thread (Keychain migration may prompt).
@@ -87,16 +97,12 @@ final class SyncCoordinator: ObservableObject {
             lastReport = report
             lastSyncAt = Date()
             status = .idle
-            Self.log.info("sync ok: pulled \(report.pulled) pushed \(report.pushed) conflicts \(report.conflicts) generation \(report.generation)")
+            Self.log.notice("sync ok: pulled \(report.pulled) pushed \(report.pushed) conflicts \(report.conflicts) generation \(report.generation)")
             if report.pulled > 0 || report.conflicts > 0 { try session.reload() }
         } catch {
             let text = Self.describe(error)
             Self.log.error("sync failed: \(text, privacy: .public)")
             status = .error(text)
-        }
-        if dirty {
-            dirty = false
-            await syncNow()
         }
     }
 
@@ -138,7 +144,7 @@ final class SyncCoordinator: ObservableObject {
         case VaultError.rollbackDetected(let local, let remote):
             return "The remote vault is older (generation \(remote)) than what this Mac last synced (\(local)). Refusing to roll back."
         case VaultError.corruptManifest:
-            return "The remote manifest failed verification. It was written with a different vault key or tampered with."
+            return "The remote manifest failed verification: it belongs to another vault or was modified."
         case VaultError.authenticationFailed, VaultError.corruptItemData:
             return "A remote item failed verification and was not applied."
         case SyncError.unauthorized:

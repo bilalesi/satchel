@@ -52,7 +52,30 @@ public final class GitHubStore: RemoteStore {
               let bytes = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) else {
             throw SyncError.remote(status: status, message: "object too large for the contents API")
         }
-        return RemoteObject(data: bytes, etag: sha)
+        // End-to-end integrity: the bytes must hash to the blob id GitHub reports.
+        // Measured 2026-11-02: the contents API re-encodes files it sniffs as text (the
+        // manifest is JSON followed by a binary MAC), expanding bytes >= 0x80 to UTF-8.
+        // The git blob API returns the stored bytes exactly, so fall back to it.
+        if GitBlob.sha(bytes) == sha { return RemoteObject(data: bytes, etag: sha) }
+        let exact = try await blob(sha)
+        guard GitBlob.sha(exact) == sha else {
+            throw SyncError.remote(status: status, message: "\(path) failed its integrity check on download")
+        }
+        return RemoteObject(data: exact, etag: sha)
+    }
+
+    /// Exact stored bytes of a blob by id.
+    private func blob(_ sha: String) async throws -> Data {
+        let url = api.appendingPathComponent("repos/\(repo.owner)/\(repo.name)/git/blobs/\(sha)")
+        let (data, status) = try await send(request("GET", url))
+        try check(status, data)
+        guard status == 200,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let b64 = obj["content"] as? String,
+              let bytes = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) else {
+            throw SyncError.remote(status: status, message: "blob \(sha) unavailable")
+        }
+        return bytes
     }
 
     public func put(_ path: String, data: Data, ifMatch: String?) async throws -> String {
