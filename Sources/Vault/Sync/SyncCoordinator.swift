@@ -29,6 +29,8 @@ final class SyncCoordinator: ObservableObject {
     private var periodic: Timer?
     private let monitor = NWPathMonitor()
     private var online = true
+    /// Bumped whenever a vault is locked or unlocked, so a run that outlives its vault drops its result.
+    private var epoch = 0
 
     init() {
         periodic = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
@@ -56,6 +58,7 @@ final class SyncCoordinator: ObservableObject {
 
     /// Loads this vault's configuration and selection. Called right after unlock.
     func vaultUnlocked(_ store: VaultStore) {
+        epoch += 1
         adoptLegacyConfig(into: store)
         config = RemoteConfig.load(from: store)
         selection = Self.loadSelection(store)
@@ -76,6 +79,7 @@ final class SyncCoordinator: ObservableObject {
 
     /// Forgets everything that came from the vault and stops pending work.
     func vaultLocked() {
+        epoch += 1
         debounce?.cancel()
         config = .off
         selection = SyncSelection()
@@ -180,6 +184,7 @@ final class SyncCoordinator: ObservableObject {
     private func runOnce() async {
         guard let session, let store = session.store, store.isUnlocked else { return }
         status = .syncing
+        let epoch = self.epoch
         // .notice is persisted by the unified log; .info is not (kept for diagnosis).
         Self.log.notice("sync start: \(self.config.displayName, privacy: .public)")
         do {
@@ -189,12 +194,14 @@ final class SyncCoordinator: ObservableObject {
                 let remote = try config.makeStore(secret: try config.resolveSecret(store: store))
                 return try await SyncEngine(store: store, remote: remote, filter: selection).sync()
             }.value
+            guard epoch == self.epoch else { return } // the vault was locked or switched meanwhile
             lastReport = report
             lastSyncAt = Date()
             status = .idle
             Self.log.notice("sync ok: pulled \(report.pulled) pushed \(report.pushed) conflicts \(report.conflicts) generation \(report.generation)")
             if report.pulled > 0 || report.conflicts > 0 { try session.reload() }
         } catch {
+            guard epoch == self.epoch else { return }
             let text = Self.describe(error, config: config)
             Self.log.error("sync failed: \(text, privacy: .public)")
             status = .error(text)
