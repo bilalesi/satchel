@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // One instance per user: a second copy would take over the browser bridge socket and
         // open the same vault. Hand over to the running one instead.
         let me = ProcessInfo.processInfo.processIdentifier
-        if let other = NSRunningApplication.runningApplications(withBundleIdentifier: AppIdentity.bundleID).first(where: { $0.processIdentifier != me }) {
+        if let other = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? AppIdentity.bundleID).first(where: { $0.processIdentifier != me }) {
             other.activate()
             NSApp.terminate(nil)
             return

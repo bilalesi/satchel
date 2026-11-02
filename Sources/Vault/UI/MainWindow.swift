@@ -112,6 +112,9 @@ struct Sidebar: View {
 
     var body: some View {
         List(selection: $selection) {
+            HStack { WorkspaceSwitcher(); Spacer() }
+                .listRowSeparator(.hidden)
+                .selectionDisabled()
             Section("Vault") {
                 row(.home, "Overview", .dashboard, .secureNote, nil)
                 row(.all, "All items", .inbox, .login, session.items.count)
@@ -160,10 +163,6 @@ struct Sidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack { WorkspaceSwitcher(); Spacer() }
-                .padding(.horizontal, Theme.Space.m).padding(.bottom, Theme.Space.xs)
-        }
         .safeAreaInset(edge: .bottom) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {

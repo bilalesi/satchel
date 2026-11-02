@@ -57,7 +57,7 @@ struct GeneralSettings: View {
     @State private var axTrusted = AutoType.isTrusted
 
     var body: some View {
-        SettingsPage(height: (autoType ? 390 : 290) + (updates.isAvailable ? 120 : 0) + (hotKey ? 44 : 0) + (hotKey && hotKeyState.conflict ? 28 : 0)) {
+        SettingsPage(height: (autoType ? 390 : 290) + (updates.isAvailable ? 150 : 0) + (hotKey ? 56 : 0) + (hotKey && hotKeyState.conflict ? 28 : 0)) {
             Section {
                 LabeledContent("Lock after") {
                     Dropdown(selection: $autoLock, options: [
@@ -223,7 +223,7 @@ struct VaultSettings: View {
     @EnvironmentObject var session: VaultSession
 
     var body: some View {
-        SettingsPage(height: 420 + CGFloat(session.workspaces.count) * 36) {
+        SettingsPage(height: 470 + CGFloat(session.workspaces.count) * 36) {
             WorkspaceManager()
             Section("Location") {
                 LabeledContent("Folder") {

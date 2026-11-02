@@ -137,7 +137,7 @@ struct CategorySheet: View {
             }
             .padding(Theme.Space.l)
         }
-        .frame(width: 440, height: sync.isConfigured ? 560 : 480)
+        .frame(width: 440, height: sync.isConfigured ? 660 : 580)
         .excludedFromCapture()
         .confirmationDialog("Delete “\(existing?.name ?? "")”?", isPresented: $confirmDelete) {
             Button("Delete category", role: .destructive) {

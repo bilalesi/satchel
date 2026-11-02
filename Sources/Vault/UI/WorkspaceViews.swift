@@ -95,6 +95,7 @@ private struct WorkspaceRow: View {
         HStack(spacing: Theme.Space.s) {
             Icon(.layers, size: 13).foregroundStyle(.secondary)
             TextField("Name", text: $name)
+                .labelsHidden()
                 .textFieldStyle(.plain)
                 .onSubmit { session.renameWorkspace(workspace.id, to: name) }
                 .onChange(of: name) { _, new in session.renameWorkspace(workspace.id, to: new) }

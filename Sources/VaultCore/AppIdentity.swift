@@ -11,7 +11,11 @@ public enum AppIdentity {
 
     /// `~/Library/Application Support/Satchel/`
     public static var supportDirectory: URL {
-        applicationSupport.appendingPathComponent(name, isDirectory: true)
+        #if DEBUG
+        // Development only (compiled out of releases): run a throwaway copy against its own data.
+        if let path = ProcessInfo.processInfo.environment["SATCHEL_SUPPORT_DIR"] { return URL(fileURLWithPath: path, isDirectory: true) }
+        #endif
+        return applicationSupport.appendingPathComponent(name, isDirectory: true)
     }
 
     static var applicationSupport: URL {

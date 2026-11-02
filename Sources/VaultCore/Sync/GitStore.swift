@@ -49,9 +49,7 @@ public final class GitStore: BatchingRemoteStore, @unchecked Sendable {
     }
 
     public static var defaultCacheRoot: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(AppIdentity.name, isDirectory: true)
-            .appendingPathComponent("git-cache", isDirectory: true)
+        AppIdentity.supportDirectory.appendingPathComponent("git-cache", isDirectory: true)
     }
 
     // MARK: RemoteStore

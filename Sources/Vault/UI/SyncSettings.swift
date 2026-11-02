@@ -109,7 +109,7 @@ struct RemoteDraft: Equatable {
         case .github: return 470
         case .git: return 450
         case .webdav: return 440
-        case .s3: return 560
+        case .s3: return 520
         }
     }
 }
