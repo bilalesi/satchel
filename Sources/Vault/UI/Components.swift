@@ -321,10 +321,10 @@ final class MenuPanelController {
         guard let window = anchor.window, !items.isEmpty else { return }
         let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let showsChecks = items.contains(where: \.checked)
-        let host = NSHostingView(rootView: MenuList(items: items, showsChecks: showsChecks, minWidth: minWidth) { [weak self] in
-            self?.close()
+        let host = NSHostingView(rootView: PanelSurface {
+            MenuList(items: items, showsChecks: showsChecks, minWidth: minWidth) { [weak self] in self?.close() }
         })
-        let fitting = host.fittingSize
+        let fitting = host.fittingSize.insetBy(PanelInset.value)
         let size = NSSize(width: max(minWidth, fitting.width), height: min(fitting.height, 380))
         present(host, size: size, anchorRect: anchorRect, window: window,
                 xOffset: alignTrailing ? anchorRect.width - size.width : 0)
@@ -336,8 +336,8 @@ final class MenuPanelController {
         close()
         guard let window = anchor.window else { return }
         let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        let host = NSHostingView(rootView: InfoCard(text: text, width: width) { [weak self] in self?.close() })
-        let size = host.fittingSize
+        let host = NSHostingView(rootView: PanelSurface { InfoCard(text: text, width: width) { [weak self] in self?.close() } })
+        let size = host.fittingSize.insetBy(PanelInset.value)
         present(host, size: size, anchorRect: anchorRect, window: window, xOffset: -12)
     }
 
@@ -353,8 +353,8 @@ final class MenuPanelController {
         let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let body = content { [weak self] in self?.close() }
         dismissHandler = onDismiss
-        let host = NSHostingView(rootView: body)
-        let size = host.fittingSize
+        let host = NSHostingView(rootView: PanelSurface { body })
+        let size = host.fittingSize.insetBy(PanelInset.value)
         present(host, size: size, anchorRect: anchorRect, window: window, xOffset: 0, placement: placement)
     }
 
@@ -372,14 +372,18 @@ final class MenuPanelController {
             origin.y = min(max(origin.y, visible.minY + 4), visible.maxY - size.height - 4)
             origin.x = min(max(origin.x, visible.minX + 4), visible.maxX - size.width - 4)
         }
-        let p = MenuPanel(contentRect: NSRect(origin: origin, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        // The window is the card plus a transparent margin that holds the shadow. The window's own shadow is
+        // off: it is computed from the first frame and shows as a square outline around the window.
+        let inset = PanelInset.value
+        let frame = NSRect(x: origin.x - inset, y: origin.y - inset, width: size.width + 2 * inset, height: size.height + 2 * inset)
+        let p = MenuPanel(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
-        // The system glass draws its own edge and depth; a window shadow on top of it shows as a square outline.
-        if #available(macOS 26.0, *) { p.hasShadow = false } else { p.hasShadow = true }
+        p.hasShadow = false
         p.level = .popUpMenu
         p.isReleasedWhenClosed = false
-        p.contentView = glassContainer(for: host, size: size)
+        host.frame = NSRect(origin: .zero, size: frame.size)
+        p.contentView = host
         p.onDismiss = { [weak self] in self?.close() }
         AppSettings.applyCapturePolicy(to: p)
         window.addChildWindow(p, ordered: .above)
@@ -396,34 +400,6 @@ final class MenuPanelController {
         dismissHandler = nil
         handler?()
     }
-
-    /// The card's background is the system's own glass (`NSGlassEffectView`, as in system menus), not
-    /// a SwiftUI imitation drawn inside a clear window. Before macOS 26 it is the closest material.
-    private func glassContainer(for host: NSView, size: NSSize) -> NSView {
-        let frame = NSRect(origin: .zero, size: size)
-        host.frame = frame
-        host.wantsLayer = true
-        host.layer?.cornerRadius = Theme.radius
-        host.layer?.cornerCurve = .continuous
-        host.layer?.masksToBounds = true
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView(frame: frame)
-            glass.cornerRadius = Theme.radius
-            glass.contentView = host
-            return glass
-        }
-        let blur = NSVisualEffectView(frame: frame)
-        blur.material = .popover
-        blur.blendingMode = .behindWindow
-        blur.state = .active
-        blur.wantsLayer = true
-        blur.layer?.cornerRadius = Theme.radius
-        blur.layer?.cornerCurve = .continuous
-        blur.layer?.masksToBounds = true
-        host.autoresizingMask = [.width, .height]
-        blur.addSubview(host)
-        return blur
-    }
 }
 
 final class MenuPanel: NSPanel {
@@ -436,14 +412,27 @@ final class MenuPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) { onDismiss?() }
 }
 
-/// The look every floating card shares: material, hairline, 12-pt corners.
+/// The look every floating card shares: Liquid Glass (a material before macOS 26), a hairline edge so the
+/// card stands out from a white window, and a soft shadow. The transparent `inset` around the card is where
+/// the shadow is drawn; the window is that much larger than the card.
+/// Width of the transparent margin around a card, where its shadow is drawn.
+enum PanelInset { static let value: CGFloat = 16 }
+
 struct PanelSurface<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
         content
-            .glassSurface(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .glassSurface(shape)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.75))
+            .shadow(color: .black.opacity(0.28), radius: 12, y: 5)
+            .padding(PanelInset.value)
     }
+}
+
+private extension NSSize {
+    func insetBy(_ inset: CGFloat) -> NSSize { NSSize(width: width - 2 * inset, height: height - 2 * inset) }
 }
 
 private struct MenuList: View {
