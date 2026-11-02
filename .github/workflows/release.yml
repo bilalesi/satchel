@@ -1,0 +1,77 @@
+name: Release
+
+# Every push to main that changes the app builds, tests and publishes a DMG as a GitHub release.
+on:
+  push:
+    branches: [main]
+    # The encrypted vault syncs into this repository (machine-vault/) as commits on main;
+    # those must never trigger a release. Docs-only pushes don't either.
+    paths-ignore:
+      - "machine-vault/**"
+      - "docs/**"
+      - "**/*.md"
+      - ".gitignore"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false # let a running release finish; the next push queues behind it
+
+jobs:
+  release:
+    # Second guard next to paths-ignore: commits written by the app's own sync.
+    if: ${{ !startsWith(github.event.head_commit.message, 'vault:') }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    permissions:
+      contents: write # create the release and upload the DMG; nothing else
+    steps:
+      # Actions are pinned to a full commit hash, not a movable tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the version is derived from the commit count
+          persist-credentials: false
+
+      - name: Select the newest Xcode 26
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          swift --version
+
+      - name: Test
+        run: swift test
+
+      - name: Version
+        run: |
+          # Commits that touch the app, not the vault data the app syncs into this repo.
+          COUNT="$(git rev-list --count HEAD -- . ':!machine-vault')"
+          echo "VERSION=0.1.${COUNT}" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=${COUNT}" >> "$GITHUB_ENV"
+
+      - name: Build universal DMG
+        run: UNIVERSAL=1 ./scripts/make-dmg.sh
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          DMG="build/Satchel-${VERSION}.dmg"
+          sed "s/__VERSION__/${VERSION}/g" .github/release-notes.md.tmpl > build/notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # A re-run of the same commit replaces the assets instead of failing.
+            gh release upload "$TAG" "$DMG" "$DMG.sha256" --clobber
+          else
+            gh release create "$TAG" "$DMG" "$DMG.sha256" \
+              --target "$GITHUB_SHA" \
+              --title "Satchel ${VERSION}" \
+              --notes-file build/notes.md \
+              --generate-notes \
+              --latest
+          fi

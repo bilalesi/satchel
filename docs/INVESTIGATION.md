@@ -307,6 +307,22 @@ Why not a CRDT library: items are small documents edited by one person on two or
 
 ---
 
+### 7.4 Alternative backends (suggestions, not built)
+
+Whatever the backend, the provider only ever holds ciphertext: items are encrypted per file, names are random UUIDs, the manifest is MAC'd and rollback is detected. So the provider choice decides **availability and metadata** (item count, sizes, update times), not confidentiality. Rules that apply to all of them: a private location only (ciphertext in a public place can be attacked offline against the master password); a credential scoped to one folder or bucket, revocable, stored encrypted next to the vault (as the GitHub token is); and a backend must **enforce conditional writes** (`If-Match` / non-fast-forward rejection), because the sync engine relies on them to avoid lost updates. Test that before trusting a server; some WebDAV servers ignore the header.
+
+| Option | Why people use it | Security notes | Cost to add |
+|---|---|---|---|
+| **Synced folder** (iCloud Drive, Syncthing, Dropbox, Nextcloud client) | Already supported (Folder backend). Syncthing is peer-to-peer with no cloud at all; iCloud needs nothing to set up. | Credentials stay inside the sync client, not Satchel. Cloud clients can create "conflicted copy" files; they are ignored. No conditional writes, so keep one writer at a time. | none |
+| **Git over SSH** (GitLab, Codeberg, Gitea, own server) | Developers' default (pass, gopass). | No token to store: the SSH agent holds the key. A read-write deploy key limited to one repository. A non-fast-forward rejection is the compare-and-swap. | medium (use the system `git`) |
+| **WebDAV** (Nextcloud, ownCloud, Synology, many hosts) | Self-hostable, supported by KeePass-family apps. | App-specific password over HTTPS. `If-Match` support must be verified per server. | small (one adapter) |
+| **S3-compatible** (Cloudflare R2, Backblaze B2, MinIO, AWS S3) | Cheap, durable, no server to run. | Access key restricted to one bucket and prefix. Conditional writes confirmed for AWS S3 and MinIO; **not verified** for R2 and B2. | small (SigV4 signing) |
+| **CloudKit private database** | What Apple-native managers use; zero setup for the user. | Apple holds only encrypted records; needs a paid Apple Developer account and the iCloud entitlement. | large + paid account |
+| **Self-hosted sync server** (Vaultwarden model) | One place for several people. | You run and patch a server and its authentication. | large |
+| **No sync** | Highest assurance. | Encrypted copies by hand (the vault folder is already a complete backup). | none |
+
+Suggested order if one more backend is built: **WebDAV** (covers Nextcloud, Synology and self-hosting with the smallest adapter), then **S3-compatible**, with **Git over SSH** for developers who want zero stored tokens.
+
 ## 8. Performance notes
 
 | Concern | Approach | Reason |

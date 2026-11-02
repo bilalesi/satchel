@@ -4,7 +4,33 @@ Satchel is a native macOS secret vault for one person: logins, API keys, databas
 
 Design and security analysis: [docs/INVESTIGATION.md](docs/INVESTIGATION.md). Phase 1 plan: [docs/superpowers/plans/2026-11-01-phase1-core-vault.md](docs/superpowers/plans/2026-11-01-phase1-core-vault.md).
 
-## Build and install
+## Install
+
+**From a release (recommended).** Open the repository's **Releases** page, download `Satchel-<version>.dmg`, open it and drag Satchel onto Applications. Requires macOS 15 or newer, Apple silicon or Intel.
+
+Satchel is signed ad hoc and not notarized (notarization needs a paid Apple Developer account), so macOS blocks the first launch. Open **System Settings → Privacy & Security**, scroll to the message about Satchel and click **Open Anyway**; or run once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Satchel.app
+```
+
+Optional integrity check next to the download: `shasum -a 256 -c Satchel-<version>.dmg.sha256`. Updating is the same: install the newer DMG over the old app. The vault in `~/Library/Application Support/Satchel` is never touched.
+
+## Releases
+
+Every push to `main` that changes the app runs `.github/workflows/release.yml`: it runs the tests, builds a universal (Apple silicon + Intel) DMG with `scripts/make-dmg.sh`, and publishes it with its SHA-256 as release `v0.1.<n>`, where `<n>` counts the commits that touch the app. The workflow ignores `machine-vault/**`, docs and Markdown, and any commit whose message starts with `vault:`, so syncing your vault into this repository never creates a release. It uses only the built-in `GITHUB_TOKEN` (write access to releases) and no other secret; the one third-party action is pinned to a commit hash.
+
+Build the same DMG locally:
+
+```bash
+UNIVERSAL=1 VERSION=0.1.0 scripts/make-dmg.sh   # → build/Satchel-0.1.0.dmg
+```
+
+Notarized releases would need an Apple Developer ID certificate and a notarytool credential stored as repository secrets, plus two extra workflow steps (sign with the certificate, `xcrun notarytool submit --wait`, `xcrun stapler staple`). Not set up.
+
+**Keep the vault out of this repository.** The sync folder `machine-vault/` shares the `main` branch with the source, so its commits interleave with yours and a plain push is rejected until you `git pull --rebase`. Prefer a separate private repository for the vault (Settings → Sync).
+
+## Build from source
 
 Requires Xcode 26 (Swift 6.3) on Apple silicon, macOS 15 or newer.
 
