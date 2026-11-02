@@ -1,8 +1,12 @@
 #!/usr/bin/env swift
 // Draws Satchel's app icon with Core Graphics and writes:
-//   Resources/AppIcon.iconset/*.png  → iconutil → Resources/AppIcon.icns   (classic, all sizes)
+//   Resources/AppIcon.iconset/*.png  → iconutil → Resources/AppIcon.icns   (classic, macOS <= 15)
 //   Resources/AppIcon.icon/           → actool  → Assets.car               (macOS 26 layered icon)
-// Small sizes are drawn with less detail and heavier strokes (optical sizing), not downscaled.
+//
+// Design: the satchel IS the icon. The leather is the background (no separate plate); the
+// handle, flap, stitching and clasp are drawn large on it. macOS 26 masks every icon to its
+// rounded square, so full-bleed leather is the only way to have no plate behind the artwork.
+// Small sizes use heavier strokes and drop the stitching instead of downscaling detail.
 // Usage: swift scripts/make-icon.swift [output-dir]   (default: Resources)
 
 import AppKit
@@ -18,37 +22,27 @@ func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> CGColor {
             blue: CGFloat(hex & 0xff) / 255, alpha: a)
 }
 
-let inkTop = rgb(0x2C3140), inkBottom = rgb(0x12141B)
-let leatherLight = rgb(0xF4B866), leatherDark = rgb(0xD47F2A)
-let flapLight = rgb(0xE79A3F), flapDark = rgb(0xB9631C)
-let handleColor = rgb(0xE5A04C)
-let claspLight = rgb(0xFFF6E6), claspDark = rgb(0xF0DDBF)
+let leatherTop = rgb(0xF7C27A), leatherBottom = rgb(0xD9822C)
+let flapTop = rgb(0xE9993F), flapBottom = rgb(0xB5601B)
+let handleColor = rgb(0x8E4812), handleHighlight = rgb(0xB8681F)
+let claspTop = rgb(0xFFF6E6), claspBottom = rgb(0xEBD3AC)
 let keyhole = rgb(0x3A220F)
-let stitch = rgb(0xFFF1DA, 0.85)
+let stitch = rgb(0xFFF1DA, 0.9)
 
-// MARK: Geometry (1024 design grid, y grows downward like the Icon Composer canvas)
+// MARK: Geometry (1024 grid, y grows downward)
 
 enum Detail { case full, medium, minimal }
 
-struct Glyph {
-    /// Scale of the glyph around the canvas centre; small sizes enlarge it to read better.
-    var scale: CGFloat
-    var handleWidth: CGFloat
-    var detail: Detail
-}
-
-func glyph(for pixels: Int) -> Glyph {
+func detail(for pixels: Int) -> Detail {
     switch pixels {
-    case ...16: return Glyph(scale: 1.16, handleWidth: 70, detail: .minimal)
-    case ...32: return Glyph(scale: 1.10, handleWidth: 60, detail: .minimal)
-    case ...64: return Glyph(scale: 1.04, handleWidth: 52, detail: .medium)
-    case ...128: return Glyph(scale: 1.0, handleWidth: 46, detail: .medium) // stitching would be < 1px
-    default: return Glyph(scale: 1.0, handleWidth: 44, detail: .full)
+    case ...32: return .minimal
+    case ...128: return .medium
+    default: return .full
     }
 }
 
-func roundedRect(_ r: CGRect, _ radius: CGFloat) -> CGPath {
-    CGPath(roundedRect: r, cornerWidth: radius, cornerHeight: radius, transform: nil)
+func handleWidth(_ d: Detail) -> CGFloat {
+    switch d { case .full: return 72; case .medium: return 84; case .minimal: return 104 }
 }
 
 func linear(_ ctx: CGContext, _ path: CGPath, _ top: CGColor, _ bottom: CGColor, from y0: CGFloat, to y1: CGFloat) {
@@ -60,139 +54,140 @@ func linear(_ ctx: CGContext, _ path: CGPath, _ top: CGColor, _ bottom: CGColor,
     ctx.restoreGState()
 }
 
-// Bag parts, in the 1024 grid before the glyph scale is applied.
-let body = CGRect(x: 254, y: 404, width: 516, height: 404)
-let bodyRadius: CGFloat = 76
+func roundedRect(_ r: CGRect, _ radius: CGFloat) -> CGPath {
+    CGPath(roundedRect: r, cornerWidth: radius, cornerHeight: radius, transform: nil)
+}
 
 func handlePath() -> CGPath {
     let p = CGMutablePath()
-    p.move(to: CGPoint(x: 398, y: 410))
-    p.addLine(to: CGPoint(x: 398, y: 336))
-    p.addCurve(to: CGPoint(x: 626, y: 336), control1: CGPoint(x: 398, y: 248), control2: CGPoint(x: 626, y: 248))
-    p.addLine(to: CGPoint(x: 626, y: 410))
+    p.move(to: CGPoint(x: 336, y: 430))
+    p.addLine(to: CGPoint(x: 336, y: 330))
+    p.addCurve(to: CGPoint(x: 688, y: 330), control1: CGPoint(x: 336, y: 150), control2: CGPoint(x: 688, y: 150))
+    p.addLine(to: CGPoint(x: 688, y: 430))
     return p
 }
 
+/// Flap: wider than the canvas so the rounded-square mask trims its sides.
 func flapPath() -> CGPath {
     let p = CGMutablePath()
-    p.move(to: CGPoint(x: 254, y: 404 + bodyRadius))
-    p.addArc(tangent1End: CGPoint(x: 254, y: 404), tangent2End: CGPoint(x: 254 + bodyRadius, y: 404), radius: bodyRadius)
-    p.addLine(to: CGPoint(x: 770 - bodyRadius, y: 404))
-    p.addArc(tangent1End: CGPoint(x: 770, y: 404), tangent2End: CGPoint(x: 770, y: 404 + bodyRadius), radius: bodyRadius)
-    p.addLine(to: CGPoint(x: 770, y: 560))
-    p.addCurve(to: CGPoint(x: 254, y: 560), control1: CGPoint(x: 640, y: 676), control2: CGPoint(x: 384, y: 676))
+    p.move(to: CGPoint(x: -40, y: 430))
+    p.addLine(to: CGPoint(x: 1064, y: 430))
+    p.addLine(to: CGPoint(x: 1064, y: 640))
+    p.addCurve(to: CGPoint(x: -40, y: 640), control1: CGPoint(x: 900, y: 860), control2: CGPoint(x: 124, y: 860))
     p.closeSubpath()
     return p
 }
 
-let clasp = CGRect(x: 466, y: 566, width: 92, height: 106)
+let clasp = CGRect(x: 452, y: 690, width: 120, height: 140)
 
-func keyholePath(_ detail: Detail) -> CGPath {
+func keyholePath(_ d: Detail) -> CGPath {
     let p = CGMutablePath()
     let cx = clasp.midX
-    p.addEllipse(in: CGRect(x: cx - 15, y: clasp.minY + 28, width: 30, height: 30))
-    if detail != .minimal {
-        p.addPath(roundedRect(CGRect(x: cx - 7, y: clasp.minY + 46, width: 14, height: 36), 6))
+    p.addEllipse(in: CGRect(x: cx - 19, y: clasp.minY + 38, width: 38, height: 38))
+    if d != .minimal {
+        p.addPath(roundedRect(CGRect(x: cx - 9, y: clasp.minY + 62, width: 18, height: 46), 8))
     }
     return p
 }
 
 // MARK: Layers
 
-/// Draws into a 1024 canvas. `background` adds the ink squircle; `parts` picks layers.
 struct Parts: OptionSet { let rawValue: Int
-    static let handle = Parts(rawValue: 1), body = Parts(rawValue: 2), flap = Parts(rawValue: 4)
-    static let all: Parts = [.handle, .body, .flap]
+    static let background = Parts(rawValue: 1), handle = Parts(rawValue: 2), flap = Parts(rawValue: 4)
+    static let all: Parts = [.background, .handle, .flap]
 }
 
-func draw(_ ctx: CGContext, pixels: Int, background: Bool, parts: Parts, squircle: Bool) {
+/// `squircle`: draw inside the macOS icon grid (824 pt body + shadow) for the classic .icns.
+/// Otherwise the artwork fills the whole 1024 canvas (Icon Composer layers).
+func draw(_ ctx: CGContext, pixels: Int, parts: Parts, squircle: Bool) {
     let s = CGFloat(pixels) / 1024
     ctx.scaleBy(x: s, y: s)
-    // Flip to a top-left origin so the geometry reads like the design grid.
     ctx.translateBy(x: 0, y: 1024)
     ctx.scaleBy(x: 1, y: -1)
     ctx.setShouldAntialias(true)
     ctx.interpolationQuality = .high
+    let d = detail(for: pixels)
 
-    if background {
-        // macOS icon grid: 824pt body inside 1024 with a soft drop shadow (legacy .icns only).
-        let rect = squircle ? CGRect(x: 100, y: 100, width: 824, height: 824) : CGRect(x: 0, y: 0, width: 1024, height: 1024)
-        let shape = roundedRect(rect, squircle ? 185 : 0)
-        if squircle {
-            ctx.saveGState()
-            ctx.setShadow(offset: CGSize(width: 0, height: 12), blur: 28, color: rgb(0x000000, 0.35))
-            ctx.addPath(shape); ctx.setFillColor(inkBottom); ctx.fillPath()
-            ctx.restoreGState()
-        }
-        linear(ctx, shape, inkTop, inkBottom, from: rect.minY, to: rect.maxY)
-        // Faint top sheen.
-        ctx.saveGState(); ctx.addPath(shape); ctx.clip()
-        let sheen = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                               colors: [rgb(0xFFFFFF, 0.10), rgb(0xFFFFFF, 0)] as CFArray, locations: [0, 1])!
-        ctx.drawLinearGradient(sheen, start: CGPoint(x: 0, y: rect.minY), end: CGPoint(x: 0, y: rect.minY + rect.height * 0.45), options: [])
+    ctx.saveGState()
+    if squircle {
+        let rect = CGRect(x: 100, y: 100, width: 824, height: 824)
+        let shape = roundedRect(rect, 185)
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: 12), blur: 28, color: rgb(0x000000, 0.35))
+        ctx.addPath(shape); ctx.setFillColor(leatherBottom); ctx.fillPath()
         ctx.restoreGState()
-        if squircle {
-            ctx.addPath(shape); ctx.setStrokeColor(rgb(0xFFFFFF, 0.08)); ctx.setLineWidth(2); ctx.strokePath()
-        }
+        ctx.addPath(shape)
+        ctx.clip()
+        // Artwork was drawn for the full canvas; fit it to the 824 body.
+        ctx.translateBy(x: 100, y: 100)
+        ctx.scaleBy(x: 824 / 1024, y: 824 / 1024)
     }
 
-    let g = glyph(for: pixels)
-    ctx.saveGState()
-    ctx.translateBy(x: 512, y: 540)
-    ctx.scaleBy(x: g.scale, y: g.scale)
-    ctx.translateBy(x: -512, y: -540)
+    if parts.contains(.background) {
+        linear(ctx, CGPath(rect: CGRect(x: -40, y: -40, width: 1104, height: 1104), transform: nil),
+               leatherTop, leatherBottom, from: 0, to: 1024)
+        let sheen = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                               colors: [rgb(0xFFFFFF, 0.22), rgb(0xFFFFFF, 0)] as CFArray, locations: [0, 1])!
+        ctx.drawLinearGradient(sheen, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: 420), options: [])
+    }
 
     if parts.contains(.handle) {
         ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: 8), blur: 14, color: rgb(0x4A2308, 0.45))
         ctx.addPath(handlePath())
-        ctx.setLineWidth(g.handleWidth); ctx.setLineCap(.round); ctx.setLineJoin(.round)
+        ctx.setLineWidth(handleWidth(d)); ctx.setLineCap(.round); ctx.setLineJoin(.round)
         ctx.setStrokeColor(handleColor); ctx.strokePath()
         ctx.restoreGState()
-    }
-    if parts.contains(.body) {
-        let bodyPath = roundedRect(body, bodyRadius)
-        if background {
+        if d == .full {
             ctx.saveGState()
-            ctx.setShadow(offset: CGSize(width: 0, height: 18), blur: 36, color: rgb(0x000000, 0.45))
-            ctx.addPath(bodyPath); ctx.setFillColor(leatherDark); ctx.fillPath()
+            ctx.addPath(handlePath())
+            ctx.setLineWidth(handleWidth(d) * 0.28); ctx.setLineCap(.round)
+            ctx.setStrokeColor(handleHighlight)
+            ctx.translateBy(x: 0, y: -handleWidth(d) * 0.2)
+            ctx.strokePath()
             ctx.restoreGState()
         }
-        linear(ctx, bodyPath, leatherLight, leatherDark, from: body.minY, to: body.maxY)
     }
+
     if parts.contains(.flap) {
         let flap = flapPath()
         ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 10), blur: 18, color: rgb(0x5A2E0A, 0.45))
-        ctx.addPath(flap); ctx.setFillColor(flapDark); ctx.fillPath()
+        ctx.setShadow(offset: CGSize(width: 0, height: 14), blur: 26, color: rgb(0x4A2308, 0.5))
+        ctx.addPath(flap); ctx.setFillColor(flapBottom); ctx.fillPath()
         ctx.restoreGState()
-        linear(ctx, flap, flapLight, flapDark, from: 404, to: 660)
-        if g.detail == .full {
-            // Stitching just inside the flap edge.
+        linear(ctx, flap, flapTop, flapBottom, from: 430, to: 800)
+
+        if d == .full {
             ctx.saveGState()
-            let t = CGAffineTransform(translationX: 512, y: 520).scaledBy(x: 0.9, y: 0.88).translatedBy(x: -512, y: -520)
-            ctx.addPath(flapPath().copy(using: [t])!)
-            ctx.setLineWidth(7); ctx.setLineCap(.round)
-            ctx.setLineDash(phase: 0, lengths: [16, 18])
+            let inner = CGMutablePath()
+            inner.move(to: CGPoint(x: 70, y: 470))
+            inner.addLine(to: CGPoint(x: 954, y: 470))
+            inner.addLine(to: CGPoint(x: 954, y: 630))
+            inner.addCurve(to: CGPoint(x: 70, y: 630), control1: CGPoint(x: 830, y: 800), control2: CGPoint(x: 194, y: 800))
+            inner.closeSubpath()
+            ctx.addPath(inner)
+            ctx.setLineWidth(9); ctx.setLineCap(.round)
+            ctx.setLineDash(phase: 0, lengths: [20, 22])
             ctx.setStrokeColor(stitch); ctx.strokePath()
             ctx.restoreGState()
         }
-        // Clasp with keyhole.
-        let claspPath = roundedRect(clasp, g.detail == .minimal ? 18 : 22)
+
+        let claspPath = roundedRect(clasp, d == .minimal ? 22 : 28)
         ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 6), blur: 10, color: rgb(0x3A1C05, 0.4))
-        ctx.addPath(claspPath); ctx.setFillColor(claspDark); ctx.fillPath()
+        ctx.setShadow(offset: CGSize(width: 0, height: 8), blur: 14, color: rgb(0x3A1C05, 0.45))
+        ctx.addPath(claspPath); ctx.setFillColor(claspBottom); ctx.fillPath()
         ctx.restoreGState()
-        linear(ctx, claspPath, claspLight, claspDark, from: clasp.minY, to: clasp.maxY)
-        ctx.addPath(keyholePath(g.detail)); ctx.setFillColor(keyhole); ctx.fillPath()
+        linear(ctx, claspPath, claspTop, claspBottom, from: clasp.minY, to: clasp.maxY)
+        ctx.addPath(keyholePath(d)); ctx.setFillColor(keyhole); ctx.fillPath()
     }
     ctx.restoreGState()
 }
 
-func render(pixels: Int, background: Bool, parts: Parts, squircle: Bool) -> Data {
+func render(pixels: Int, parts: Parts, squircle: Bool) -> Data {
     let cs = CGColorSpace(name: CGColorSpace.sRGB)!
     let ctx = CGContext(data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
                         space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    draw(ctx, pixels: pixels, background: background, parts: parts, squircle: squircle)
+    draw(ctx, pixels: pixels, parts: parts, squircle: squircle)
     let rep = NSBitmapImageRep(cgImage: ctx.makeImage()!)
     return rep.representation(using: .png, properties: [:])!
 }
@@ -202,7 +197,7 @@ func write(_ data: Data, _ url: URL) {
     try! data.write(to: url)
 }
 
-// MARK: Classic iconset (every size macOS asks for, each drawn at its own detail level)
+// MARK: Classic iconset (each size drawn at its own detail level)
 
 let iconset = outDir.appendingPathComponent("AppIcon.iconset", isDirectory: true)
 try? FileManager.default.removeItem(at: iconset)
@@ -210,35 +205,36 @@ for (points, scales) in [(16, [1, 2]), (32, [1, 2]), (128, [1, 2]), (256, [1, 2]
     for scale in scales {
         let px = points * scale
         let name = scale == 1 ? "icon_\(points)x\(points).png" : "icon_\(points)x\(points)@2x.png"
-        write(render(pixels: px, background: true, parts: .all, squircle: true), iconset.appendingPathComponent(name))
+        write(render(pixels: px, parts: .all, squircle: true), iconset.appendingPathComponent(name))
     }
 }
 
-// MARK: Icon Composer bundle (macOS 26): background is the bundle's fill; glyph parts are layers.
+// MARK: Icon Composer bundle (macOS 26). The system draws the rounded square and its glass;
+// the leather is the bundle's fill, the handle and flap are layers on top.
 
 let iconBundle = outDir.appendingPathComponent("AppIcon.icon", isDirectory: true)
 try? FileManager.default.removeItem(at: iconBundle)
 let assets = iconBundle.appendingPathComponent("Assets", isDirectory: true)
-write(render(pixels: 1024, background: false, parts: [.handle, .body], squircle: false), assets.appendingPathComponent("bag.png"))
-write(render(pixels: 1024, background: false, parts: [.flap], squircle: false), assets.appendingPathComponent("flap.png"))
+write(render(pixels: 1024, parts: [.handle], squircle: false), assets.appendingPathComponent("handle.png"))
+write(render(pixels: 1024, parts: [.flap], squircle: false), assets.appendingPathComponent("flap.png"))
 let iconJSON = """
 {
   "fill" : {
     "linear-gradient" : [
-      "srgb:0.17255,0.19216,0.25098,1.00000",
-      "srgb:0.07059,0.07843,0.10588,1.00000"
+      "srgb:0.96863,0.76078,0.47843,1.00000",
+      "srgb:0.85098,0.50980,0.17255,1.00000"
     ]
   },
   "groups" : [
     {
-      "layers" : [ { "image-name" : "flap.png", "name" : "flap", "glass" : true } ],
+      "layers" : [ { "image-name" : "flap.png", "name" : "flap" } ],
       "shadow" : { "kind" : "layer-color", "opacity" : 0.5 },
-      "translucency" : { "enabled" : true, "value" : 0.3 }
+      "translucency" : { "enabled" : false, "value" : 0 }
     },
     {
-      "layers" : [ { "image-name" : "bag.png", "name" : "bag", "glass" : true } ],
-      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
-      "translucency" : { "enabled" : true, "value" : 0.2 }
+      "layers" : [ { "image-name" : "handle.png", "name" : "handle" } ],
+      "shadow" : { "kind" : "layer-color", "opacity" : 0.4 },
+      "translucency" : { "enabled" : false, "value" : 0 }
     }
   ],
   "supported-platforms" : { "squares" : [ "macOS" ] }

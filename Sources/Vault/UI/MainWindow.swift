@@ -42,6 +42,7 @@ struct MainWindow: View {
                             Label { Text("Lock") } icon: { Image(nsImage: Codicon.lock.image(size: 15)) }
                         }
                         .labelStyle(.iconOnly)
+                        .pointerStyle(.link)
                         .keyboardShortcut("l", modifiers: [.command, .shift])
                         .help("Lock the vault (⇧⌘L)")
                     }

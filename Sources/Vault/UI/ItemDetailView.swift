@@ -31,7 +31,7 @@ struct ItemDetailView: View {
                         // Hover highlights stay inside the card's rounded corners.
                         .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
                     }
-                    if !overview.urls.isEmpty || !overview.bundleIDs.isEmpty { linksCard }
+                    if !overview.urls.isEmpty || !overview.bundleIDs.isEmpty { usedInSection }
                     if !details.history.isEmpty { historyCard(details.history) }
                 } else if let loadError {
                     Card { Label { Text(loadError) } icon: { Icon(.warning) }.foregroundStyle(.red) }
@@ -100,6 +100,8 @@ struct ItemDetailView: View {
         return rows
     }
 
+    private static let seedInfo = "The secret key behind your one-time codes (two-factor login). Satchel uses it to generate the 6-digit code shown above every 30 seconds. Anyone who has this key can generate your codes, so keep it hidden."
+
     /// Fixed mask length: the dots never reveal how long a secret is.
     private static let mask = String(repeating: "•", count: 12)
 
@@ -108,7 +110,10 @@ struct ItemDetailView: View {
         let multiline = key == "notes" || key == "privateKey"
         return HStack(alignment: multiline ? .top : .center, spacing: Theme.Space.m) {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                Text(label).font(Theme.caption).foregroundStyle(.secondary)
+                HStack(spacing: Theme.Space.xs) {
+                    Text(label).font(Theme.caption).foregroundStyle(.secondary)
+                    if key == "totpSeed" { InfoTip(text: Self.seedInfo) }
+                }
                 Text(shown ? value : Self.mask)
                     .font(shown && secret ? Theme.body.monospaced() : Theme.body)
                     .tracking(shown ? 0 : 1)
@@ -179,42 +184,40 @@ struct ItemDetailView: View {
         }
     }
 
-    /// Card padding 8 + row padding 8 = text at 16pt, the same edge as the section label.
-    private var linksCard: some View {
-        Card(padding: Theme.Space.s) {
-            VStack(alignment: .leading, spacing: 2) {
-                SectionLabel(text: "Where it is used")
-                    .padding(.horizontal, Theme.Space.s).padding(.top, Theme.Space.s).padding(.bottom, Theme.Space.xs)
+    /// Small tiles: a big icon with the name underneath. Sites open on click; apps are informational.
+    private var usedInSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            SectionLabel(text: "Where it is used")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104, maximum: 140), spacing: Theme.Space.s, alignment: .top)],
+                      alignment: .leading, spacing: Theme.Space.s) {
                 ForEach(overview.urls, id: \.self) { u in
-                    Link(destination: URL(string: u.contains("://") ? u : "https://" + u) ?? URL(fileURLWithPath: "/")) {
-                        linkRow(Text(u)) { Icon(.globe, size: 14).foregroundStyle(.secondary).frame(width: 20, height: 20) }
+                    let url = URL(string: u.contains("://") ? u : "https://" + u)
+                    UsedTile(title: Self.displayHost(u), help: u, url: url) {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Theme.accent(.login).gradient)
+                            .overlay(Icon(.globe, size: 20).foregroundStyle(.white))
                     }
-                    .pointerStyle(.link)
                 }
                 ForEach(overview.bundleIDs, id: \.self) { b in
-                    linkRow(Text(appName(b)).foregroundStyle(.primary)) {
+                    UsedTile(title: appName(b), help: b, url: nil) {
                         if let icon = appIcon(b) {
-                            Image(nsImage: icon).resizable().frame(width: 20, height: 20)
+                            Image(nsImage: icon).resizable().interpolation(.high)
                         } else {
-                            Icon(.extensions, size: 14).foregroundStyle(.secondary).frame(width: 20, height: 20)
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Theme.accent(.secureNote).gradient)
+                                .overlay(Icon(.extensions, size: 20).foregroundStyle(.white))
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private func linkRow<I: View>(_ title: Text, @ViewBuilder icon: () -> I) -> some View {
-        HStack(spacing: Theme.Space.s) {
-            icon()
-            title.font(Theme.body).lineLimit(1).truncationMode(.middle)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, Theme.Space.s)
-        .frame(height: 32)
-        .contentShape(Rectangle())
-        .hoverHighlight()
+    /// "https://accounts.google.com/signin" → "google.com" (the site, not the sub-page). The full
+    /// address stays in the tooltip.
+    private static func displayHost(_ raw: String) -> String {
+        guard let host = URL(string: raw.contains("://") ? raw : "https://" + raw)?.host else { return raw }
+        return DomainMatcher.shared.registrableDomain(of: host)
     }
 
     private func appIcon(_ bundleID: String) -> NSImage? {
@@ -273,3 +276,39 @@ struct ItemDetailView: View {
     }
 }
 
+
+/// One "where it is used" tile.
+private struct UsedTile<Glyph: View>: View {
+    let title: String
+    let help: String
+    let url: URL?
+    @ViewBuilder var glyph: Glyph
+    @State private var hovering = false
+
+    var body: some View {
+        let tile = VStack(spacing: Theme.Space.s) {
+            glyph.frame(width: 40, height: 40)
+            Text(title)
+                .font(Theme.caption.weight(.medium))
+                .lineLimit(1).truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity, minHeight: 92)
+        .padding(.horizontal, Theme.Space.s)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                .strokeBorder(hovering && url != nil ? Color.accentColor.opacity(0.5) : Theme.hairline, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(hovering && url != nil ? 0.08 : 0), radius: 8, y: 3)
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .onHover { hovering = $0 }
+        if let url {
+            Button { NSWorkspace.shared.open(url) } label: { tile }
+                .buttonStyle(.plain)
+                .pointerStyle(.link)
+                .help(help)
+        } else {
+            tile.help(help)
+        }
+    }
+}

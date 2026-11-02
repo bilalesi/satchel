@@ -95,6 +95,7 @@ struct Card<Content: View>: View {
             .scaleEffect(lifted ? 1.01 : 1)
             .animation(.easeOut(duration: 0.15), value: lifted)
             .onHover { hovering = $0 }
+            .pointerStyle(interactive ? .link : nil)
     }
 }
 

@@ -78,6 +78,7 @@ private struct PillBody: View {
             .animation(.easeOut(duration: 0.12), value: hovering)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
             .onHover { hovering = enabled && $0 }
+            .pointerStyle(enabled ? .link : nil) // hand cursor on every pill
     }
 
     private var foreground: Color {
@@ -131,6 +132,7 @@ private struct CircleBody: View {
             .animation(.easeOut(duration: 0.12), value: hovering)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
             .onHover { hovering = enabled && $0 }
+            .pointerStyle(enabled ? .link : nil)
     }
 
     private var fill: Color {
@@ -231,6 +233,7 @@ struct CapsuleSegmented<Value: Hashable>: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .pointerStyle(.link)
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
@@ -285,7 +288,22 @@ final class MenuPanelController {
         })
         let fitting = host.fittingSize
         let size = NSSize(width: max(minWidth, fitting.width), height: min(fitting.height, 380))
-        var origin = NSPoint(x: anchorRect.minX, y: anchorRect.minY - size.height - 4)
+        present(host, size: size, anchorRect: anchorRect, window: window, xOffset: 0)
+    }
+
+    /// A small text card under an anchor (the "i" explanations). Same look and closing
+    /// rules as the menus: Escape, selection elsewhere, or focus loss.
+    func showText(_ text: String, anchor: NSView, width: CGFloat = 288) {
+        close()
+        guard let window = anchor.window else { return }
+        let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        let host = NSHostingView(rootView: InfoCard(text: text, width: width) { [weak self] in self?.close() })
+        let size = host.fittingSize
+        present(host, size: size, anchorRect: anchorRect, window: window, xOffset: -12)
+    }
+
+    private func present(_ host: NSView, size: NSSize, anchorRect: NSRect, window: NSWindow, xOffset: CGFloat) {
+        var origin = NSPoint(x: anchorRect.minX + xOffset, y: anchorRect.minY - size.height - 4)
         if let screen = window.screen ?? NSScreen.main {
             let visible = screen.visibleFrame
             if origin.y < visible.minY { origin.y = anchorRect.maxY + 4 } // flip above when no room below
@@ -366,6 +384,7 @@ private struct MenuList: View {
         let isOn = highlighted == item.id
         return Button { activate(item) } label: { rowLabel(item, isOn: isOn) }
             .buttonStyle(.plain)
+            .pointerStyle(.link)
             .onHover { if $0 { highlighted = item.id } }
     }
 
@@ -490,8 +509,58 @@ struct ToolbarMenuButton: View {
         } label: {
             Label { Text(title) } icon: { Image(nsImage: icon.image(size: 15)) }
                 .labelStyle(.titleAndIcon)
+                .padding(.horizontal, Theme.Space.xs) // room inside the system capsule on both sides
         }
         .background(AnchorReader(box: anchor))
+        .pointerStyle(.link)
+    }
+}
+
+// MARK: - Info tip
+
+/// Small "i" that explains a field. Click opens a floating card (same panel as the dropdowns).
+struct InfoTip: View {
+    let text: String
+    @State private var anchor = AnchorBox()
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            guard let view = anchor.view else { return }
+            MenuPanelController.shared.showText(text, anchor: view)
+        } label: {
+            Icon(.info, size: 12)
+                .foregroundStyle(hovering ? Color.accentColor : Color.secondary)
+                .frame(width: 16, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(AnchorReader(box: anchor))
+        .pointerStyle(.link)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .help("What is this?")
+        .accessibilityLabel("What is this?")
+        .accessibilityHint(text)
+    }
+}
+
+struct InfoCard: View {
+    let text: String
+    let width: CGFloat
+    let onDone: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Space.s) {
+            Icon(.info, size: 14).foregroundStyle(Color.accentColor).padding(.top, 1)
+            Text(text).font(Theme.body).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Theme.Space.m)
+        .frame(width: width, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.hairline))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+        .onTapGesture(perform: onDone)
     }
 }
 
