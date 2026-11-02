@@ -3,8 +3,8 @@ import json, subprocess, sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from cards import backdrop, font, W, H
 
-OUT = 'satchel-promo-v3.mp4'
-SLOW = 0.76   # tempo: clip speeds are multiplied by this (never below real time); camera and captions scale with them
+OUT = 'satchel-promo-v4.mp4'
+SLOW = 0.58   # tempo: clip speeds are multiplied by this (never below real time); camera and captions scale with them
 
 # ---------- image helpers ----------
 def text_png(text, size, weight, color, name, pad=24):
