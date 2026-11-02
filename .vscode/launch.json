@@ -39,6 +39,46 @@
       "target": "vault-host",
       "configuration": "release",
       "preLaunchTask": "swift: Build Release vault-host"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:vault}",
+      "name": "Debug Satchel",
+      "target": "Satchel",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug Satchel"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:vault}",
+      "name": "Release Satchel",
+      "target": "Satchel",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release Satchel"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:vault}",
+      "name": "Debug satchel-host",
+      "target": "satchel-host",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug satchel-host"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:vault}",
+      "name": "Release satchel-host",
+      "target": "satchel-host",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release satchel-host"
     }
   ]
 }

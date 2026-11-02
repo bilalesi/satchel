@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "Vault",
+    name: "Satchel",
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "VaultCore", targets: ["VaultCore"]),
-        .executable(name: "Vault", targets: ["Vault"]),
+        .executable(name: "Satchel", targets: ["Vault"]),
     ],
     dependencies: [
         // The only third-party dependency: Argon2id, XChaCha20-Poly1305, secure memory.
@@ -28,7 +28,7 @@ let package = Package(
         ),
         // Native messaging host: a stdio ↔ unix-socket relay the browser spawns.
         .executableTarget(
-            name: "vault-host",
+            name: "satchel-host",
             dependencies: ["VaultCore"],
             path: "Sources/VaultHost",
             swiftSettings: [.swiftLanguageMode(.v6)]

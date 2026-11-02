@@ -53,16 +53,16 @@ $("save").addEventListener("click", async () => {
   if (!form || !form.ok) { note("Could not read the form on this page."); return; }
   if (!form.password) { note("Type the password on the page first, then click Save."); return; }
   const r = await send({ type: "save", username: form.username, password: form.password, title: "" });
-  if (r && r.ok && !r.locked) { note("Saved to Vault."); refresh(); }
+  if (r && r.ok && !r.locked) { note("Saved to Satchel."); refresh(); }
   else if (r && r.locked) { show("locked"); }
   else note("Save failed: " + (r && r.error));
 });
 
 $("generate").addEventListener("click", async () => {
   const r = await send({ type: "generate" });
-  if (r && r.ok && !r.locked) note("New password copied by Vault; it clears after the vault's timer.");
+  if (r && r.ok && !r.locked) note("New password copied by Satchel; it clears after the vault's timer.");
   else if (r && r.locked) show("locked");
-  else note("Vault is not available.");
+  else note("Satchel is not available.");
 });
 
 $("open").addEventListener("click", () => send({ type: "open" }));

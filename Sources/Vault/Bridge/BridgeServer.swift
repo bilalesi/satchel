@@ -1,7 +1,7 @@
 import Foundation
 import VaultCore
 
-/// Listens on the unix socket for `vault-host` connections. Each frame is decoded,
+/// Listens on the unix socket for `satchel-host` connections. Each frame is decoded,
 /// handled on the main actor, and answered in order. The peer must be an executable
 /// inside this app's own bundle; other processes are dropped.
 /// ponytail: same-user malware can copy the bundle; a Team ID requirement would need a
@@ -40,7 +40,7 @@ final class BridgeServer: @unchecked Sendable {
     private func peerAllowed(_ client: Int32) -> Bool {
         guard let path = UnixSocket.peerExecutablePath(client) else { return false }
         let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-        return resolved.hasPrefix(bundlePath + "/") && resolved.hasSuffix("/vault-host")
+        return resolved.hasPrefix(bundlePath + "/") && resolved.hasSuffix("/" + AppIdentity.hostExecutableName)
     }
 
     private func serve(_ client: Int32) {

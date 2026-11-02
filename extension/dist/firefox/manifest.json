@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Vault",
+  "name": "Satchel",
   "version": "0.1.0",
-  "description": "Fill logins from your local Vault.",
-  "browser_specific_settings": { "gecko": { "id": "vault@bilalesi", "strict_min_version": "121.0" } },
+  "description": "Fill logins from your local Satchel vault.",
+  "browser_specific_settings": { "gecko": { "id": "satchel@bilalesi", "strict_min_version": "121.0" } },
   "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
   "permissions": ["nativeMessaging", "activeTab", "tabs", "clipboardWrite"],
   "background": { "scripts": ["background.js"] },
-  "action": { "default_popup": "popup.html", "default_title": "Vault" },
+  "action": { "default_popup": "popup.html", "default_title": "Satchel" },
   "content_scripts": [{ "matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "run_at": "document_idle", "all_frames": false }],
   "commands": { "fill-first": { "suggested_key": { "default": "Ctrl+Shift+L", "mac": "Command+Shift+L" }, "description": "Fill the best matching login" } }
 }

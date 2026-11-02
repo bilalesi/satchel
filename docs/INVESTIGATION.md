@@ -386,7 +386,7 @@ Testing per phase: unit tests for crypto round-trips and AAD tampering (must fai
 | 4 | Touch ID policy | Not answered → **default `biometryCurrentSet`** | Fingerprint re-enrollment asks for the master password once. |
 | 5 | Import/export | Not answered → **deferred**; manual entry first | KDBX/1PUX import can be added without format changes. |
 | 6 | Reference app for look & feel | **Pulse** by egoist (pulse.egoist.dev) | Visual direction captured in §9.1. |
-| 7 | Name and bundle id | **Pending** | Needed before phase 1 code (App Group, XPC, native messaging host names). |
+| 7 | Name and bundle id | **Satchel**, `com.bilalesi.satchel` (chosen 2026-11-02; built as "Vault" until then, migrated on first launch) | App Group, socket, native messaging host name derive from it. |
 
 ### 11.1 What "personal use, not in the store" changes
 
@@ -411,7 +411,8 @@ Testing per phase: unit tests for crypto round-trips and AAD tampering (must fai
 | One-time codes (RFC 6238) | built |
 | Independent security review | done; 8 findings fixed with tests (synthetic-event fills, header/manifest consistency, withheld remote items, keystroke target re-check, lossless merge, sync.json integrity, GitHub listing cap, generated-password clipboard) |
 | 3 Safari credential provider | waiting for a paid Apple Developer account |
-| S3 backend, KDBX/1PUX import, product name | not started |
+| S3 backend, KDBX/1PUX import | not started |
+| Product name | Satchel, installed in /Applications on 2026-11-02 |
 
 ## 12. Sources
 

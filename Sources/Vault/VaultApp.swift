@@ -8,6 +8,7 @@ struct VaultApp: App {
     @StateObject private var session: VaultSession
 
     init() {
+        AppIdentity.migrateLegacySupportDirectory() // before anything opens the vault
         AppSettings.registerDefaults()
         let s = VaultSession()
         _session = StateObject(wrappedValue: s)

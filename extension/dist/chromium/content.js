@@ -1,4 +1,4 @@
-// Vault content script: runs in the top frame only, finds login fields, shows matches
+// Satchel content script: runs in the top frame only, finds login fields, shows matches
 // under the focused field, fills on click. Never auto-fills, never submits.
 (() => {
   if (window.top !== window) return; // no iframes: credentials go to the page the user sees
@@ -91,7 +91,7 @@
     if (locked) {
       const b = document.createElement("div");
       b.className = "btn";
-      b.textContent = "Unlock Vault to fill…";
+      b.textContent = "Unlock Satchel to fill…";
       b.addEventListener("mousedown", (e) => { e.preventDefault(); browserAPI.runtime.sendMessage({ type: "unlock" }).then(() => refresh(field)); });
       box.appendChild(b);
     } else {
@@ -106,7 +106,7 @@
       });
       const foot = document.createElement("div");
       foot.className = "foot";
-      foot.innerHTML = "<span>Vault</span><span>⌘⇧L fills the first</span>";
+      foot.innerHTML = "<span>Satchel</span><span>⌘⇧L fills the first</span>";
       box.appendChild(foot);
     }
     root.appendChild(style);

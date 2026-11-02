@@ -1,8 +1,8 @@
-// Vault extension background: the only part that talks to the native host.
+// Satchel extension background: the only part that talks to the native host.
 // Content scripts and the popup send messages here; the page's own URL claims are never
 // trusted, only sender.tab.url from the browser, and only for the top frame.
 
-const HOST = "com.bilalesi.vault";
+const HOST = "com.bilalesi.satchel";
 const browserAPI = typeof browser !== "undefined" ? browser : chrome;
 
 let port = null;

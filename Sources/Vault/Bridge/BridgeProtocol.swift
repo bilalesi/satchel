@@ -61,7 +61,7 @@ enum BrowserIntegration {
     static let allowedOrigins: Set<String> = [chromiumOrigin, AppIdentity.firefoxExtensionID]
 
     static var hostBinaryURL: URL {
-        Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/vault-host")
+        Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/" + AppIdentity.hostExecutableName)
     }
 
     static var extensionDistURL: URL? {

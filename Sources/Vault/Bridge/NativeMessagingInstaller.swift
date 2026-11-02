@@ -3,7 +3,7 @@ import Foundation
 import VaultCore
 
 /// Writes the native messaging host manifest into each browser's directory so the
-/// extension can spawn `vault-host`. Re-run after the app moves (paths are absolute).
+/// extension can spawn `satchel-host`. Re-run after the app moves (paths are absolute).
 enum NativeMessagingInstaller {
     enum Browser: String, CaseIterable, Identifiable {
         case dia, arc, chrome, firefox
@@ -35,6 +35,7 @@ enum NativeMessagingInstaller {
         }
 
         var manifestURL: URL { manifestDirectory.appendingPathComponent(AppIdentity.nativeHostName + ".json") }
+        var legacyManifestURL: URL { manifestDirectory.appendingPathComponent(AppIdentity.legacyNativeHostName + ".json") }
 
         /// The browser app exists on this Mac (by bundle id, so a moved app still counts).
         var isInstalled: Bool {
@@ -78,10 +79,16 @@ enum NativeMessagingInstaller {
         try? FileManager.default.removeItem(at: browser.manifestURL)
     }
 
-    /// At launch: manifests that exist but point elsewhere are rewritten for this copy.
+    /// At launch: manifests that exist but point elsewhere are rewritten for this copy, and
+    /// manifests left by the app's previous name are replaced.
     static func refreshStalePaths() {
-        for b in Browser.allCases where b.manifestPresent && b.manifestStale {
-            try? install(b)
+        for b in Browser.allCases {
+            if FileManager.default.fileExists(atPath: b.legacyManifestURL.path) {
+                try? FileManager.default.removeItem(at: b.legacyManifestURL)
+                try? install(b)
+            } else if b.manifestPresent && b.manifestStale {
+                try? install(b)
+            }
         }
     }
 }

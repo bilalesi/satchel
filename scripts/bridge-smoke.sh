@@ -1,9 +1,9 @@
 #!/bin/zsh
-# With Vault.app running, send one native-messaging "hello" through vault-host and print the reply.
+# With Satchel.app running, send one native-messaging "hello" through satchel-host and print the reply.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-APP="${1:-build/Vault.app}"
-HOST="$APP/Contents/MacOS/vault-host"
+APP="${1:-build/Satchel.app}"
+HOST="$APP/Contents/MacOS/satchel-host"
 ORIGIN="chrome-extension://$(cat extension/src/.chromium-id)/"
 python3 - "$HOST" "$ORIGIN" <<'PY'
 import json, struct, subprocess, sys, signal
