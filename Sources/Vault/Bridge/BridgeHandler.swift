@@ -44,7 +44,8 @@ final class BridgeHandler {
                 let details = try session.details(id)
                 guard let password = details.fields["password"], !password.isEmpty else { return .failure(req.id, "no_password") }
                 var r = status(req.id)
-                r.credential = BridgeCredential(username: item.username, password: password)
+                r.credential = BridgeCredential(username: item.username, password: password,
+                                                totp: details.fields["totpSeed"].flatMap(TOTP.init)?.code())
                 return r
             } catch {
                 return .failure(req.id, error.localizedDescription)

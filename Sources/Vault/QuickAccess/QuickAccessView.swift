@@ -51,6 +51,7 @@ struct QuickAccessView: View {
                     .onKeyPress(.return, phases: .down) { press in
                         if press.modifiers.contains(.shift) { typeSelected(field: nil) }
                         else if press.modifiers.contains(.option) { typeSelected(field: "username") }
+                        else if press.modifiers.contains(.control) { copyCode() }
                         else { act(copyUsername: press.modifiers.contains(.command)) }
                         return .handled
                     }
@@ -76,6 +77,7 @@ struct QuickAccessView: View {
             HStack(spacing: 12) {
                 hint("↩", "copy \(Theme.label(selectedType.primarySecretField).lowercased())")
                 hint("⌘↩", "copy username")
+                hint("⌃↩", "copy one-time code")
                 if QuickAccessController.shared.frontmostApp != nil && AppSettings.autoTypeEnabled {
                     hint("⇧↩", "type into \(appName(QuickAccessController.shared.frontmostBundleID ?? ""))")
                     hint("⌥↩", "type username")
@@ -149,6 +151,17 @@ struct QuickAccessView: View {
         Task {
             try? await Task.sleep(for: .milliseconds(350))
             QuickAccessController.shared.hide()
+        }
+    }
+
+    private func copyCode() {
+        guard let item = results.first(where: { $0.id == selected }) else { return }
+        if let code = session.oneTimeCode(of: item.id) {
+            session.copy(code)
+            copiedTitle = item.title + " (one-time code)"
+            Task { try? await Task.sleep(for: .milliseconds(350)); QuickAccessController.shared.hide() }
+        } else {
+            typeError = "\(item.title) has no one-time code"
         }
     }
 

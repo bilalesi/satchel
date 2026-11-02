@@ -43,13 +43,20 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  const OTP_SELECTOR = 'input[autocomplete="one-time-code"], input[name*="otp" i], input[id*="otp" i], input[name*="totp" i], input[name*="2fa" i], input[id*="2fa" i], input[name*="verification" i], input[name*="code" i][maxlength="6"]';
+
   function fillCredential(cred, anchor) {
+    // A page that only shows a one-time-code field (second step of a login) gets the code.
+    const otp = Array.from(document.querySelectorAll(OTP_SELECTOR)).find(visible) || null;
+    const anyPassword = Array.from(document.querySelectorAll(PASSWORD_SELECTOR)).find(visible) || null;
+    if (otp && !anyPassword && cred.totp) { setValue(otp, cred.totp); otp.focus(); return; }
     let pw = anchor && anchor.type === "password" ? anchor : (anchor ? passwordFieldFor(anchor) : null);
-    if (!pw) pw = Array.from(document.querySelectorAll(PASSWORD_SELECTOR)).find(visible) || null;
+    if (!pw) pw = anyPassword;
     const user = pw ? usernameFieldFor(pw) : (anchor || null);
     if (user && cred.username) setValue(user, cred.username);
     if (pw) { setValue(pw, cred.password); pw.focus(); }
     else if (user && !cred.username) setValue(user, cred.password);
+    if (otp && cred.totp) setValue(otp, cred.totp);
   }
 
   function closeDropdown() {
@@ -125,6 +132,7 @@
   function isLoginField(el) {
     if (!(el instanceof HTMLInputElement) || !visible(el)) return false;
     if (el.type === "password") return true;
+    if (el.matches(OTP_SELECTOR)) return true;
     return el.matches(USERNAME_SELECTOR) && passwordFieldFor(el) !== null;
   }
 

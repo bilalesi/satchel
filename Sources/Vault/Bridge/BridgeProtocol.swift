@@ -32,6 +32,8 @@ struct BridgeItem: Encodable {
 struct BridgeCredential: Encodable {
     let username: String?
     let password: String
+    /// Current one-time code when the item has a TOTP seed.
+    var totp: String?
 }
 
 struct BridgeResponse: Encodable {

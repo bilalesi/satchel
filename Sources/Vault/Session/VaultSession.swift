@@ -218,8 +218,19 @@ final class VaultSession: ObservableObject {
         }
     }
 
+    /// Current one-time code for an item, if it has a TOTP seed.
+    func oneTimeCode(of id: UUID) -> String? {
+        guard let seed = try? details(id).fields["totpSeed"], let totp = TOTP(seed) else { return nil }
+        return totp.code()
+    }
+
     /// Copies a secret field without keeping the decoded details around.
+    /// The pseudo-field "totp" copies the current one-time code.
     func copyField(_ field: String, of id: UUID) {
+        if field == "totp" {
+            if let code = oneTimeCode(of: id) { copy(code) } else { lastError = "This item has no one-time code." }
+            return
+        }
         do {
             if let v = try details(id).fields[field], !v.isEmpty { copy(v) }
         } catch { lastError = error.localizedDescription }

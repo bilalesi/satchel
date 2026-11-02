@@ -22,6 +22,9 @@ struct ItemDetailView: View {
                             if let u = overview.username { fieldRow("Username", u, secret: false) }
                             ForEach(overview.type.fieldKeys, id: \.self) { key in
                                 if let v = details.fields[key], !v.isEmpty {
+                                    if key == "totpSeed", let totp = TOTP(v) {
+                                        oneTimeCodeRow(totp)
+                                    }
                                     fieldRow(Theme.label(key), v, secret: ItemType.secretFieldKeys.contains(key), key: key)
                                 }
                             }
@@ -86,6 +89,40 @@ struct ItemDetailView: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .overlay(alignment: .bottom) { Divider().padding(.leading, 14) }
+    }
+
+    /// Live one-time code with a countdown; copy puts the code (not the seed) on the clipboard.
+    private func oneTimeCodeRow(_ totp: TOTP) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let code = totp.code(at: ctx.date)
+            let left = totp.secondsRemaining(at: ctx.date)
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("One-time code").font(.system(size: 11)).foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        Text(code.count == 6 ? code.prefix(3) + " " + code.suffix(3) : code)
+                            .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
+                        ZStack {
+                            Circle().stroke(Theme.hairline, lineWidth: 3)
+                            Circle().trim(from: 0, to: CGFloat(left) / CGFloat(totp.period))
+                                .stroke(left <= 5 ? Color.orange : Theme.accent(.login), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                .rotationEffect(.degrees(-90))
+                            Text("\(left)").font(.system(size: 9, weight: .semibold)).monospacedDigit()
+                        }
+                        .frame(width: 24, height: 24)
+                    }
+                }
+                Spacer()
+                Button {
+                    session.copy(code)
+                    copied = "One-time code"
+                    Task { try? await Task.sleep(for: .seconds(1.5)); if copied == "One-time code" { copied = nil } }
+                } label: { Image(systemName: copied == "One-time code" ? "checkmark" : "doc.on.doc") }
+                .buttonStyle(.borderless).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .overlay(alignment: .bottom) { Divider().padding(.leading, 14) }
+        }
     }
 
     private var linksCard: some View {
