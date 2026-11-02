@@ -17,6 +17,10 @@ struct MainWindow: View {
     @State private var editing: ItemOverview?
     @State private var creatingType: ItemType?
     @AppStorage("menuExpanded") private var menuExpanded = true
+    @AppStorage("listWidth") private var listWidth: Double = 330
+    @AppStorage("didShowWelcome") private var didShowWelcome = false
+    @State private var welcomeStart: Date?
+    @State private var uiScale: CGFloat = 1
 
     var body: some View {
         Group {
@@ -26,9 +30,41 @@ struct MainWindow: View {
                 UnlockView()
             }
         }
+        .scaleEffect(welcomeStart == nil ? 1 : uiScale)
+        .overlay { if let start = welcomeStart { WelcomeSplash(start: start, onFinish: finishWelcome).ignoresSafeArea() } }
         .frame(minWidth: 820, minHeight: 520)
         .excludedFromCapture()
         .onChange(of: session.state) { _, s in if s != .unlocked { selectedItem = nil } }
+        .onAppear { if shouldPlayWelcome { startWelcome() } }
+        .onChange(of: session.welcomeRequested) { _, requested in
+            if requested { session.welcomeRequested = false; startWelcome() }
+        }
+    }
+
+    /// The welcome plays once, on the very first launch (no vault yet). Settings can replay it.
+    private var shouldPlayWelcome: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["SATCHEL_SPLASH"] != nil { return true } // UI testing only
+        #endif
+        return session.state == .noVault && !didShowWelcome
+    }
+
+    private func startWelcome() {
+        guard welcomeStart == nil else { return }
+        // Reduce Motion: no animation at all; the screen behind it is simply there.
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { didShowWelcome = true; return }
+        uiScale = 0.9
+        welcomeStart = Date()
+        Task {
+            try? await Task.sleep(for: .seconds(SplashTiming.pushStart))
+            withAnimation(.easeOut(duration: SplashTiming.pushEnd - SplashTiming.pushStart)) { uiScale = 1 }
+        }
+    }
+
+    private func finishWelcome() {
+        welcomeStart = nil
+        uiScale = 1
+        didShowWelcome = true
     }
 
     /// Title band on top, then workspaces, menu, list and detail side by side.
@@ -37,15 +73,20 @@ struct MainWindow: View {
             TitleBand(query: $query, menuExpanded: $menuExpanded) { creatingType = $0 }
             HStack(spacing: 0) {
                 WorkspaceRail()
-                MenuColumn(selection: $selection, expanded: menuExpanded)
-                HSplitView {
+                // Menu, list and detail are separate rounded blocks with a gap between them.
+                HStack(spacing: Theme.blockGap) {
+                    MenuColumn(selection: $selection, expanded: menuExpanded)
                     ItemList(filter: selection ?? .home, query: $query, selectedItem: $selectedItem)
-                        .frame(minWidth: 280, idealWidth: 330, maxWidth: 480)
-                    detail.frame(minWidth: 380, maxWidth: .infinity)
+                        .frame(width: listWidth)
+                        .block()
+                    SplitHandle(width: $listWidth, range: 280...480)
+                    detail.frame(minWidth: 380, maxWidth: .infinity).block()
                 }
+                .padding(.trailing, Theme.blockGap)
+                .padding(.bottom, Theme.blockGap)
             }
         }
-        .background(Theme.canvas)
+        .background(Theme.stage)
         .ignoresSafeArea(.container, edges: .top)
         .animation(.snappy(duration: 0.25), value: menuExpanded)
         .sheet(item: $creatingType) { t in
@@ -75,7 +116,6 @@ struct MainWindow: View {
             OverviewCards(onSelect: { selection = $0 })
         } else {
             EmptyState(icon: .key, title: "Select an item")
-                .background(Theme.canvas)
         }
     }
 }
@@ -136,7 +176,6 @@ struct ItemList: View {
         }
         .listStyle(.inset)
         .scrollContentBackground(.hidden)
-        .background(Theme.canvas)
         .overlay {
             if list.isEmpty {
                 EmptyState(icon: query.isEmpty ? .inbox : .search, title: query.isEmpty ? "No items yet" : "No matches")
@@ -185,5 +224,28 @@ struct ItemRow: View {
 
     private var subtitle: String {
         [item.username, item.hosts.first].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+
+/// The gap between the list block and the detail block, which is also the handle that resizes the list.
+struct SplitHandle: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+    @State private var startWidth: Double?
+
+    var body: some View {
+        Color.clear
+            .frame(width: Theme.blockGap)
+            .contentShape(Rectangle().inset(by: -4))
+            .pointerStyle(.columnResize)
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { value in
+                    let start = startWidth ?? width
+                    startWidth = start
+                    width = min(max(start + value.translation.width, range.lowerBound), range.upperBound)
+                }
+                .onEnded { _ in startWidth = nil })
+            .accessibilityLabel("Resize the list")
     }
 }

@@ -23,6 +23,11 @@ enum Theme {
     static let numeral = hero
 
     static let canvas = Color(nsColor: .windowBackgroundColor)
+    /// What the blocks sit on: the window colour, a touch deeper (lighter in dark mode), so the
+    /// rounded blocks read as separate pieces.
+    static var stage: some View { Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.045)) }
+    static let blockRadius: CGFloat = 18
+    static let blockGap: CGFloat = 8
     static let card = Color(nsColor: .controlBackgroundColor)
     static let hairline = Color(nsColor: .separatorColor).opacity(0.6)
     static let hover = Color.primary.opacity(0.05)
@@ -160,6 +165,15 @@ struct DotMatrix: View {
 }
 
 extension View {
+    /// A solid rounded block on the stage: one piece of the window, separate from the others, like
+    /// the menu column.
+    func block() -> some View {
+        self.background(Theme.card)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous).strokeBorder(Theme.hairline))
+            .shadow(color: .black.opacity(0.05), radius: 6, y: 1)
+    }
+
     /// Applies the screen-capture policy (hidden from screenshots unless allowed in Settings).
     func excludedFromCapture() -> some View {
         background(WindowAccessor { window in

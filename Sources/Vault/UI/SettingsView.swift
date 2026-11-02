@@ -51,13 +51,12 @@ struct GeneralSettings: View {
     @AppStorage(AppSettings.autoLockMinutesKey) private var autoLock = 10
     @AppStorage(AppSettings.clipboardSecondsKey) private var clipboard = 30
     @AppStorage(AppSettings.hotKeyEnabledKey) private var hotKey = true
-    @AppStorage(NotchHUD.enabledKey) private var notchHUD = true
     @ObservedObject private var hotKeyState = HotKey.shared
     @AppStorage(AppSettings.autoTypeEnabledKey) private var autoType = false
     @State private var axTrusted = AutoType.isTrusted
 
     var body: some View {
-        SettingsPage(height: (autoType ? 390 : 290) + 90 + (updates.isAvailable ? 150 : 0) + (hotKey ? 56 : 0) + (hotKey && hotKeyState.conflict ? 28 : 0)) {
+        SettingsPage(height: (autoType ? 390 : 290) + (updates.isAvailable ? 150 : 0) + (hotKey ? 56 : 0) + (hotKey && hotKeyState.conflict ? 28 : 0)) {
             Section {
                 LabeledContent("Lock after") {
                     Dropdown(selection: $autoLock, options: [
@@ -72,11 +71,6 @@ struct GeneralSettings: View {
                         .init(value: 60, title: "60 seconds"), .init(value: 0, title: "Never", subtitle: "Not recommended"),
                     ], minWidth: 190)
                 }
-            }
-            Section {
-                Toggle("Show confirmations at the top of the screen", isOn: $notchHUD)
-                Text("A short note near the notch when a secret is copied or the vault locks. It never takes focus.")
-                    .font(.callout).foregroundStyle(.secondary)
             }
             if updates.isAvailable {
                 Section("Updates") {
@@ -226,7 +220,7 @@ struct VaultSettings: View {
     @EnvironmentObject var session: VaultSession
 
     var body: some View {
-        SettingsPage(height: 470 + CGFloat(session.workspaces.count) * 36) {
+        SettingsPage(height: 540 + CGFloat(session.workspaces.count) * 36) {
             WorkspaceManager()
             Section("Location") {
                 LabeledContent("Folder") {
@@ -239,6 +233,16 @@ struct VaultSettings: View {
                 } label: {
                     Text("Everything in this folder is encrypted. Copying it is a backup.")
                         .font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            Section("Welcome") {
+                LabeledContent {
+                    PillButton("Play", icon: .sparkle, compact: true) {
+                        session.welcomeRequested = true
+                        AppDelegate.openMainWindow()
+                    }
+                } label: {
+                    Text("The short intro shown the first time Satchel opens.").font(.callout).foregroundStyle(.secondary)
                 }
             }
             Section("About") {

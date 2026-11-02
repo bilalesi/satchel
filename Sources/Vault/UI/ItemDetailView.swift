@@ -43,7 +43,6 @@ struct ItemDetailView: View {
             .frame(maxWidth: 720, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Theme.canvas)
         .task(id: overview.updatedAt) { load() }
         .confirmationDialog("Delete “\(overview.title)”?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) { session.delete(overview.id) }

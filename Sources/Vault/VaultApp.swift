@@ -58,11 +58,12 @@ struct VaultApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var session: VaultSession?
-    /// True once the app is quitting: the final lock then stays silent.
-    @MainActor static var terminating = false
     @MainActor static var bridge: BridgeServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        if let folder = ProcessInfo.processInfo.environment["SATCHEL_SPLASH_DUMP"] { SplashDump.run(to: folder); return }
+        #endif
         // One instance per user: a second copy would take over the browser bridge socket and
         // open the same vault. Hand over to the running one instead.
         let me = ProcessInfo.processInfo.processIdentifier
@@ -107,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        MainActor.assumeIsolated { Self.terminating = true; Self.session?.lock() }
+        MainActor.assumeIsolated { Self.session?.lock() }
     }
 
     @MainActor

@@ -28,7 +28,6 @@ struct OverviewCards: View {
             .frame(maxWidth: Self.maxContentWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Theme.canvas)
         // Reason: one width read per layout pass; cheaper than a GeometryReader around the content.
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }

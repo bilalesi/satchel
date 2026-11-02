@@ -408,10 +408,8 @@ struct MenuColumn: View {
             }
         }
         .frame(width: expanded ? Self.expandedWidth : Self.collapsedWidth)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .glassSurface(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .padding(.leading, Theme.Space.xs)
-        .padding(.trailing, Theme.Space.s)
-        .padding(.bottom, Theme.Space.s)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous))
+        .glassSurface(RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous))
+        .shadow(color: .black.opacity(0.05), radius: 6, y: 1)
     }
 }
