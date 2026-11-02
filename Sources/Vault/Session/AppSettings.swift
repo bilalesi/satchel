@@ -17,6 +17,7 @@ enum AppSettings {
             autoLockMinutesKey: 10,
             clipboardSecondsKey: 30,
             hotKeyEnabledKey: true,
+            NotchHUD.enabledKey: true,
         ])
     }
 

@@ -58,6 +58,8 @@ struct VaultApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var session: VaultSession?
+    /// True once the app is quitting: the final lock then stays silent.
+    @MainActor static var terminating = false
     @MainActor static var bridge: BridgeServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -105,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        MainActor.assumeIsolated { Self.session?.lock() }
+        MainActor.assumeIsolated { Self.terminating = true; Self.session?.lock() }
     }
 
     @MainActor

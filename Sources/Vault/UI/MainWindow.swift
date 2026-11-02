@@ -16,14 +16,12 @@ struct MainWindow: View {
     @State private var query = ""
     @State private var editing: ItemOverview?
     @State private var creatingType: ItemType?
+    @AppStorage("menuExpanded") private var menuExpanded = true
 
     var body: some View {
         Group {
             if session.state == .unlocked {
-                HStack(spacing: 0) {
-                    WorkspaceRail()
-                    splitView
-                }
+                workspace
             } else {
                 UnlockView()
             }
@@ -33,47 +31,34 @@ struct MainWindow: View {
         .onChange(of: session.state) { _, s in if s != .unlocked { selectedItem = nil } }
     }
 
-    private var splitView: some View {
-                NavigationSplitView {
-                    Sidebar(selection: $selection)
-                } content: {
+    /// Title band on top, then workspaces, menu, list and detail side by side.
+    private var workspace: some View {
+        VStack(spacing: 0) {
+            TitleBand(query: $query, menuExpanded: $menuExpanded) { creatingType = $0 }
+            HStack(spacing: 0) {
+                WorkspaceRail()
+                MenuColumn(selection: $selection, expanded: menuExpanded)
+                HSplitView {
                     ItemList(filter: selection ?? .home, query: $query, selectedItem: $selectedItem)
-                } detail: {
-                    detail
+                        .frame(minWidth: 280, idealWidth: 330, maxWidth: 480)
+                    detail.frame(minWidth: 380, maxWidth: .infinity)
                 }
-                .searchable(text: $query, placement: .sidebar, prompt: "Search")
-                .toolbar {
-                    // System toolbar styling: macOS draws one glass capsule per item.
-                    ToolbarItem(placement: .primaryAction) {
-                        ToolbarMenuButton(title: "New", icon: .add) {
-                            ItemType.userTypes.map { t in
-                                MenuItem(title: t.displayName, icon: Theme.icon(t)) { creatingType = t }
-                            } + [MenuItem(title: "Category", icon: .folder) { session.newCategoryRequested = true }]
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .help("New item")
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { session.lock() } label: {
-                            Label { Text("Lock") } icon: { Image(nsImage: Codicon.lock.image(size: 15)) }
-                        }
-                        .labelStyle(.iconOnly)
-                        .pointerStyle(.link)
-                        .keyboardShortcut("l", modifiers: [.command, .shift])
-                        .help("Lock the vault (⇧⌘L)")
-                    }
-                }
-                .sheet(item: $creatingType) { t in
-                    ItemEditor(type: t, overview: nil, details: nil, defaultCategory: currentCategory) { o, d in
-                        session.save(o, d)
-                        selectedItem = o.id
-                    }
-                }
-                .sheet(item: $editing) { o in
-                    ItemEditor(type: o.type, overview: o, details: try? session.details(o.id), syncChoice: sync.choice(for: o.id)) { o2, d2 in
-                        session.save(o2, d2)
-                    }
-                }
+            }
+        }
+        .background(Theme.canvas)
+        .ignoresSafeArea(.container, edges: .top)
+        .animation(.snappy(duration: 0.25), value: menuExpanded)
+        .sheet(item: $creatingType) { t in
+            ItemEditor(type: t, overview: nil, details: nil, defaultCategory: currentCategory) { o, d in
+                session.save(o, d)
+                selectedItem = o.id
+            }
+        }
+        .sheet(item: $editing) { o in
+            ItemEditor(type: o.type, overview: o, details: try? session.details(o.id), syncChoice: sync.choice(for: o.id)) { o2, d2 in
+                session.save(o2, d2)
+            }
+        }
     }
 
     private var currentCategory: UUID? {
@@ -150,7 +135,8 @@ struct ItemList: View {
             }
         }
         .listStyle(.inset)
-        .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
+        .scrollContentBackground(.hidden)
+        .background(Theme.canvas)
         .overlay {
             if list.isEmpty {
                 EmptyState(icon: query.isEmpty ? .inbox : .search, title: query.isEmpty ? "No items yet" : "No matches")

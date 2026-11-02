@@ -187,6 +187,7 @@ final class VaultSession: ObservableObject {
 
     func lock() {
         guard state == .unlocked else { return }
+        if !AppDelegate.terminating { NotchHUD.shared.show(icon: .lock, title: "Locked", tint: .neutral) }
         store?.lock()
         sync.vaultLocked()
         items = []
@@ -315,6 +316,8 @@ final class VaultSession: ObservableObject {
 
     func copy(_ value: String) {
         Clipboard.copyConcealed(value, clearAfter: TimeInterval(AppSettings.clipboardSeconds))
+        let seconds = AppSettings.clipboardSeconds
+        NotchHUD.shared.show(icon: .check, title: "Copied", detail: seconds > 0 ? "clears in \(seconds)s" : nil)
     }
 
     /// Types a field into `app`. Returns an error message to show, or nil on success.

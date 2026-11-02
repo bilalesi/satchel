@@ -53,6 +53,8 @@ enum Codicon: UInt32, CaseIterable, Sendable {
     case key = 0xEB11
     case law = 0xEB12
     case layers = 0xEBD2
+    case layoutSidebarLeft = 0xEBF3
+    case layoutSidebarLeftOff = 0xEC02
     case library = 0xEB9C
     case lightbulb = 0xEA61
     case link = 0xEB15

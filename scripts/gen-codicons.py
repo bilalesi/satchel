@@ -15,7 +15,7 @@ terminal trash unlock verified-filled warning
 git-merge server cloud cloud-upload briefcase home heart bookmark rocket flame law mail comment
 device-mobile credit-card gift book beaker organization layers arrow-down arrow-up debug-restart
 tools library game mortar-board lightbulb coffee package ellipsis diff-added arrow-right
-clippy file-media sign-out question
+clippy file-media sign-out question layout-sidebar-left layout-sidebar-left-off
 """.split()
 
 root = pathlib.Path(__file__).resolve().parent.parent

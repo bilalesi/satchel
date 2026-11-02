@@ -406,8 +406,7 @@ struct PanelSurface<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
         content
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.hairline))
+            .glassSurface(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
     }
 }
@@ -430,8 +429,7 @@ private struct MenuList: View {
         .scrollIndicators(.automatic)
         .frame(minWidth: minWidth, alignment: .leading)
         .fixedSize(horizontal: true, vertical: false)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.hairline))
+        .glassSurface(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
         .focusable()
         .focused($focused)

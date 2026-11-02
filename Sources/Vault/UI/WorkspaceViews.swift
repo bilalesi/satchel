@@ -55,13 +55,10 @@ struct WorkspaceRail: View {
             .accessibilityLabel("New workspace")
             Spacer()
         }
-        .padding(.top, 60) // below the traffic lights, level with the search field
+        .padding(.top, Theme.Space.xs)
         .padding(.bottom, Theme.Space.m)
         .frame(width: 60)
         .frame(maxHeight: .infinity)
-        .background(Theme.canvas.overlay(Color.primary.opacity(0.04)))
-        .overlay(alignment: .trailing) { Divider() }
-        .ignoresSafeArea(edges: .top) // the strip runs up under the window's title bar
         .confirmationDialog("Remove “\(removing?.name ?? "")” from this Mac?",
                             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             Button("Move to Trash", role: .destructive) { if let removing { session.removeWorkspace(removing.id) } }

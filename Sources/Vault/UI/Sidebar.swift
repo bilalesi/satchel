@@ -19,6 +19,22 @@ struct Sidebar: View {
     }
 
     var body: some View {
+        // The footer is a row under the list, not an overlay on it: rows never slide beneath it.
+        VStack(spacing: 0) {
+            menuList
+            SidebarFooter(vertical: false)
+        }
+        .confirmationDialog("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Delete category", role: .destructive) {
+                if let deleting {
+                    if selection == .category(deleting.id) { selection = .all }
+                    session.deleteCategory(deleting.id)
+                }
+            }
+        } message: { Text("Its items are kept and become uncategorized.") }
+    }
+
+    private var menuList: some View {
         List(selection: $selection) {
             Section("Vault") {
                 row(.home, "Overview", .dashboard, .secureNote, nil)
@@ -39,9 +55,12 @@ struct Sidebar: View {
                 HStack {
                     Text("Categories")
                     Spacer()
-                    Button { startDraft() } label: { Icon(.add, size: 11) }
-                        .buttonStyle(.plain).pointerStyle(.link).help("New category").accessibilityLabel("New category")
+                    Button { startDraft() } label: { Icon(.add, size: 10) }
+                        .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 22))
+                        .help("New category")
+                        .accessibilityLabel("New category")
                 }
+                .padding(.trailing, Theme.Space.xs)
             }
             Section("Types") {
                 ForEach(ItemType.userTypes) { t in
@@ -62,22 +81,13 @@ struct Sidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom, spacing: 0) { SidebarFooter() }
-        .navigationSplitViewColumnWidth(min: 210, ideal: 230)
+        .scrollContentBackground(.hidden)
         #if DEBUG
         .onAppear { if ProcessInfo.processInfo.environment["SATCHEL_DEBUG_NEW_CATEGORY"] != nil { startDraft() } } // UI testing only
         #endif
         .onChange(of: session.newCategoryRequested) { _, requested in
             if requested { startDraft(); session.newCategoryRequested = false }
         }
-        .confirmationDialog("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("Delete category", role: .destructive) {
-                if let deleting {
-                    if selection == .category(deleting.id) { selection = .all }
-                    session.deleteCategory(deleting.id)
-                }
-            }
-        } message: { Text("Its items are kept and become uncategorized.") }
     }
 
     private func startDraft() {
@@ -186,6 +196,8 @@ private struct CategoryDraftRow: View {
 /// Bottom of the sidebar: the avatar that opens the main menu, then the update icon (only when
 /// there is something to do) and Settings.
 struct SidebarFooter: View {
+    /// Stacked for the narrow collapsed rail, in a row for the full menu.
+    let vertical: Bool
     @EnvironmentObject var session: VaultSession
     @EnvironmentObject var sync: SyncCoordinator
     @EnvironmentObject var updates: UpdateManager
@@ -193,7 +205,8 @@ struct SidebarFooter: View {
     @State private var anchor = AnchorBox()
 
     var body: some View {
-        HStack(spacing: Theme.Space.s) {
+        let layout = vertical ? AnyLayout(VStackLayout(spacing: Theme.Space.s)) : AnyLayout(HStackLayout(spacing: Theme.Space.s))
+        layout {
             Button(action: openMenu) {
                 ZStack(alignment: .bottomTrailing) {
                     Image(nsImage: NSApp.applicationIconImage).resizable().interpolation(.high).frame(width: 28, height: 28)
@@ -206,7 +219,7 @@ struct SidebarFooter: View {
             .background(AnchorReader(box: anchor))
             .help(syncHelp)
             .accessibilityLabel("\(AppIdentity.name) menu")
-            Spacer()
+            if !vertical { Spacer() }
             UpdateIconButton()
             Button { openSettingsTab(nil) } label: { Icon(.settingsGear, size: 14) }
                 .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 28))
@@ -215,8 +228,7 @@ struct SidebarFooter: View {
         }
         .padding(.horizontal, Theme.Space.m)
         .padding(.vertical, Theme.Space.s)
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
+        .overlay(alignment: .top) { Divider().padding(.horizontal, Theme.Space.s) }
     }
 
     private func openSettingsTab(_ tab: SettingsView.Tab?) {
@@ -229,7 +241,7 @@ struct SidebarFooter: View {
         let content = MainMenuCard.Content(
             workspaceName: session.activeWorkspace.name, statusText: syncText, shortcutLabel: HotKey.shared.label,
             updateText: updateText, syncAvailable: sync.isConfigured, syncing: sync.status == .syncing)
-        MenuPanelController.shared.showContent(anchor: view, placement: .above) { close in
+        MenuPanelController.shared.showContent(anchor: view, placement: vertical ? .trailing : .above) { close in
             MainMenuCard(content: content,
                          syncNow: { Task { await sync.syncNow() } },
                          quickAccess: { QuickAccessController.shared.toggle() },
@@ -274,5 +286,87 @@ struct SidebarFooter: View {
         case .failed: return "Failed"
         default: return updates.isAvailable ? "Up to date" : "Off"
         }
+    }
+}
+
+
+/// The menu when collapsed: a slim rail of icons, like the left rail of the Codex app. The same
+/// choices as the full menu, one glyph each, with the name in the tooltip.
+struct CollapsedMenu: View {
+    @EnvironmentObject var session: VaultSession
+    @Binding var selection: SidebarSelection?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView(.vertical) {
+                VStack(spacing: Theme.Space.xs) {
+                    item(.home, .dashboard, "Overview")
+                    item(.all, .inbox, "All items")
+                    item(.favorites, .starFull, "Favorites")
+                    item(.recent, .history, "Recent")
+                    if !session.categories.isEmpty {
+                        rule
+                        ForEach(session.categories) { c in
+                            item(.category(c.id), c.icon, c.name, tint: c.color)
+                        }
+                    }
+                    rule
+                    ForEach(ItemType.userTypes) { t in
+                        item(.type(t), Theme.icon(t), t.displayName, tint: Theme.accent(t))
+                    }
+                }
+                .padding(.vertical, Theme.Space.s)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollIndicators(.hidden)
+            SidebarFooter(vertical: true)
+        }
+    }
+
+    private var rule: some View {
+        Divider().padding(.horizontal, Theme.Space.m).padding(.vertical, Theme.Space.xs)
+    }
+
+    private func item(_ sel: SidebarSelection, _ icon: Codicon, _ title: String, tint: Color? = nil) -> some View {
+        let selected = selection == sel
+        return Button { selection = sel } label: {
+            Icon(icon, size: 15)
+                .foregroundStyle(tint ?? (selected ? Color.primary : Color.secondary))
+                .frame(width: 36, height: 34)
+                .background(selected ? Color.primary.opacity(0.10) : .clear,
+                            in: RoundedRectangle(cornerRadius: Theme.rowRadius + 2, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// The column of the menu: the full menu, or the icon rail, on one glass panel. It stays
+/// rounded and a little inset from the window edges, as the system's floating sidebars do.
+struct MenuColumn: View {
+    @Binding var selection: SidebarSelection?
+    let expanded: Bool
+
+    static let expandedWidth: CGFloat = 232
+    static let collapsedWidth: CGFloat = 56
+
+    var body: some View {
+        ZStack {
+            if expanded {
+                Sidebar(selection: $selection).transition(.opacity)
+            } else {
+                CollapsedMenu(selection: $selection).transition(.opacity)
+            }
+        }
+        .frame(width: expanded ? Self.expandedWidth : Self.collapsedWidth)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .glassSurface(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.leading, Theme.Space.xs)
+        .padding(.trailing, Theme.Space.s)
+        .padding(.bottom, Theme.Space.s)
     }
 }
