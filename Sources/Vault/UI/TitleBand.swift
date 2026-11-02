@@ -30,15 +30,8 @@ struct TitleBand: View {
                     } + [MenuItem(title: "Category", icon: .folder) { session.newCategoryRequested = true }]
                 }
                 .help("New item")
-                Button { session.lock() } label: {
-                    Icon(.lock, size: 14).frame(width: 30, height: 30).contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassSurface(Circle(), interactive: true)
-                .pointerStyle(.link)
-                .keyboardShortcut("l", modifiers: [.command, .shift])
-                .help("Lock the vault (⇧⌘L)")
-                .accessibilityLabel("Lock")
+                IconButton(.lock, help: "Lock the vault (⇧⌘L)", kind: .secondary, diameter: 30) { session.lock() }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
             }
             .padding(.horizontal, Theme.Space.m)
             search
@@ -53,7 +46,9 @@ struct TitleBand: View {
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
                 .onExitCommand { query = ""; searchFocused = false }
-            if !query.isEmpty {
+            if query.isEmpty {
+                Text("⌘F").font(Theme.caption).foregroundStyle(.tertiary)
+            } else {
                 Button { query = "" } label: { Icon(.close, size: 11).foregroundStyle(.secondary) }
                     .buttonStyle(.plain).pointerStyle(.link).help("Clear").accessibilityLabel("Clear search")
             }
@@ -61,7 +56,10 @@ struct TitleBand: View {
         .padding(.horizontal, Theme.Space.m)
         .frame(height: 30)
         .frame(maxWidth: 380)
-        .glassSurface(Capsule())
+        // Flat on purpose: a glass capsule on a plain window leaves a smudgy halo around the field.
+        .background(Color.primary.opacity(searchFocused ? 0.08 : 0.055), in: Capsule())
+        .overlay(Capsule().strokeBorder(searchFocused ? Color.accentColor.opacity(0.6) : Theme.hairline, lineWidth: searchFocused ? 1.5 : 1))
+        .animation(.easeOut(duration: 0.12), value: searchFocused)
         .background { // ⌘F from anywhere
             Button("") { searchFocused = true }.keyboardShortcut("f", modifiers: .command).opacity(0).frame(width: 0, height: 0)
         }

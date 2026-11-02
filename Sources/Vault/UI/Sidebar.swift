@@ -19,7 +19,8 @@ struct Sidebar: View {
     }
 
     var body: some View {
-        // The footer is a row under the list, not an overlay on it: rows never slide beneath it.
+        // The rows scroll in their own clipped area and the footer is a row under it, so a long
+        // list can never run beneath the footer. (The system sidebar List ignored its bottom edge.)
         VStack(spacing: 0) {
             menuList
             SidebarFooter(vertical: false)
@@ -32,62 +33,66 @@ struct Sidebar: View {
                 }
             }
         } message: { Text("Its items are kept and become uncategorized.") }
-    }
-
-    private var menuList: some View {
-        List(selection: $selection) {
-            Section("Vault") {
-                row(.home, "Overview", .dashboard, .secureNote, nil)
-                row(.all, "All items", .inbox, .login, session.items.count)
-                row(.favorites, "Favorites", .starFull, .apiKey, session.items.filter(\.favorite).count)
-                row(.recent, "Recent", .history, .dbCredential, nil)
-            }
-            Section {
-                ForEach(session.categories) { c in
-                    CategoryRow(category: c, count: session.items.filter { $0.categoryID == c.id }.count) { deleting = c }
-                        .tag(SidebarSelection.category(c.id))
-                }
-                if draft != nil {
-                    CategoryDraftRow(draft: Binding(get: { draft ?? CategoryDraft() }, set: { draft = $0 }),
-                                     onCommit: commit, onCancel: { draft = nil })
-                }
-            } header: {
-                HStack {
-                    Text("Categories")
-                    Spacer()
-                    Button { startDraft() } label: { Icon(.add, size: 10) }
-                        .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 22))
-                        .help("New category")
-                        .accessibilityLabel("New category")
-                }
-                .padding(.trailing, Theme.Space.xs)
-            }
-            Section("Types") {
-                ForEach(ItemType.userTypes) { t in
-                    let n = session.items.filter { $0.type == t }.count
-                    Label {
-                        HStack { Text(t.displayName); Spacer(); count(n) }
-                    } icon: { IconTile(type: t, size: 18) }
-                    .tag(SidebarSelection.type(t))
-                }
-            }
-            if !tags.isEmpty {
-                Section("Tags") {
-                    ForEach(tags, id: \.self) { tag in
-                        Label { Text(tag) } icon: { Icon(.tag, size: 14).foregroundStyle(.secondary) }
-                            .tag(SidebarSelection.tag(tag))
-                    }
-                }
-            }
-        }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
         #if DEBUG
         .onAppear { if ProcessInfo.processInfo.environment["SATCHEL_DEBUG_NEW_CATEGORY"] != nil { startDraft() } } // UI testing only
         #endif
         .onChange(of: session.newCategoryRequested) { _, requested in
             if requested { startDraft(); session.newCategoryRequested = false }
         }
+    }
+
+    private var menuList: some View {
+        ScrollView(.vertical) {
+            LazyVStack(alignment: .leading, spacing: 2) {
+                MenuHeader(title: "Vault")
+                MenuRow(selection: $selection, target: .home, title: "Overview") { tile(.dashboard, .secureNote) }
+                MenuRow(selection: $selection, target: .all, title: "All items", count: session.items.count) { tile(.inbox, .login) }
+                MenuRow(selection: $selection, target: .favorites, title: "Favorites", count: session.items.filter(\.favorite).count) { tile(.starFull, .apiKey) }
+                MenuRow(selection: $selection, target: .recent, title: "Recent") { tile(.history, .dbCredential) }
+
+                MenuHeader(title: "Categories") {
+                    Button { startDraft() } label: { Icon(.add, size: 10) }
+                        .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 22))
+                        .help("New category")
+                        .accessibilityLabel("New category")
+                }
+                ForEach(session.categories) { c in
+                    CategoryRow(category: c, selection: $selection,
+                                count: session.items.filter { $0.categoryID == c.id }.count) { deleting = c }
+                }
+                if draft != nil {
+                    CategoryDraftRow(draft: Binding(get: { draft ?? CategoryDraft() }, set: { draft = $0 }),
+                                     onCommit: commit, onCancel: { draft = nil })
+                }
+
+                MenuHeader(title: "Types")
+                ForEach(ItemType.userTypes) { t in
+                    MenuRow(selection: $selection, target: .type(t), title: t.displayName,
+                            count: session.items.filter { $0.type == t }.count) { IconTile(type: t, size: 18) }
+                }
+
+                if !tags.isEmpty {
+                    MenuHeader(title: "Tags")
+                    ForEach(tags, id: \.self) { tag in
+                        MenuRow(selection: $selection, target: .tag(tag), title: tag) {
+                            Icon(.tag, size: 14).foregroundStyle(.secondary).frame(width: 18, height: 18)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.Space.s)
+            .padding(.bottom, Theme.Space.s)
+        }
+        .scrollIndicators(.automatic)
+        .frame(maxHeight: .infinity)
+        .clipped()
+    }
+
+    private func tile(_ icon: Codicon, _ tint: ItemType) -> some View {
+        RoundedRectangle(cornerRadius: 5, style: .continuous)
+            .fill(Theme.accent(tint))
+            .frame(width: 18, height: 18)
+            .overlay(Icon(icon, size: 11).foregroundStyle(.white))
     }
 
     private func startDraft() {
@@ -100,21 +105,62 @@ struct Sidebar: View {
         guard !name.isEmpty, let id = session.saveCategory(id: nil, name: name, iconName: d.iconName, colorName: d.colorName) else { return }
         selection = .category(id)
     }
+}
 
-    private func row(_ sel: SidebarSelection, _ title: String, _ icon: Codicon, _ tint: ItemType, _ n: Int?) -> some View {
-        Label {
-            HStack { Text(title); Spacer(); if let n { count(n) } }
-        } icon: {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(Theme.accent(tint))
-                .frame(width: 18, height: 18)
-                .overlay(Icon(icon, size: 11).foregroundStyle(.white))
+/// Section title of the menu ("Vault", "Categories"), with an optional control at its right edge.
+private struct MenuHeader<Accessory: View>: View {
+    let title: String
+    @ViewBuilder var accessory: Accessory
+
+    var body: some View {
+        HStack {
+            Text(title).font(Theme.caption.weight(.medium)).foregroundStyle(.secondary)
+            Spacer()
+            accessory
         }
-        .tag(sel)
+        .padding(.leading, Theme.Space.s)
+        .padding(.trailing, Theme.Space.xs)
+        .frame(height: 22)
+        .padding(.top, Theme.Space.m)
+        .padding(.bottom, 2)
     }
+}
 
-    private func count(_ n: Int) -> some View {
-        Text("\(n)").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+extension MenuHeader where Accessory == EmptyView {
+    init(title: String) { self.init(title: title) { EmptyView() } }
+}
+
+/// One selectable row of the menu: a leading tile, the title, an optional count. Selected rows are
+/// filled; the row under the pointer is lightly filled.
+private struct MenuRow<Leading: View>: View {
+    @Binding var selection: SidebarSelection?
+    let target: SidebarSelection
+    let title: String
+    var count: Int?
+    var trailing: AnyView?
+    @ViewBuilder var leading: Leading
+    @State private var hovering = false
+
+    var body: some View {
+        let selected = selection == target
+        Button { selection = target } label: {
+            HStack(spacing: Theme.Space.s + 2) {
+                leading
+                Text(title).font(Theme.body).lineLimit(1)
+                if let trailing { trailing }
+                Spacer(minLength: Theme.Space.xs)
+                if let count { Text("\(count)").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit() }
+            }
+            .padding(.horizontal, Theme.Space.s)
+            .frame(height: 30)
+            .background(selected ? Color.primary.opacity(0.10) : (hovering ? Color.primary.opacity(0.05) : .clear),
+                        in: RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -123,22 +169,18 @@ private struct CategoryRow: View {
     @EnvironmentObject var session: VaultSession
     @EnvironmentObject var sync: SyncCoordinator
     let category: CategoryInfo
+    @Binding var selection: SidebarSelection?
     let count: Int
     let onDelete: () -> Void
     @State private var anchor = AnchorBox()
 
     var body: some View {
         let synced = sync.isSynced(category: category.id)
-        Label {
-            HStack(spacing: Theme.Space.xs + 2) {
-                Text(category.name).lineLimit(1)
-                if sync.isConfigured && !synced {
-                    Icon(.lock, size: 10).foregroundStyle(.tertiary).help("Stays on this Mac")
-                }
-                Spacer()
-                Text("\(count)").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
-            }
-        } icon: { CategoryTile(category: category) }
+        MenuRow(selection: $selection, target: .category(category.id), title: category.name, count: count,
+                trailing: sync.isConfigured && !synced
+                    ? AnyView(Icon(.lock, size: 10).foregroundStyle(.tertiary).help("Stays on this Mac")) : nil) {
+            CategoryTile(category: category)
+        }
         .background(AnchorReader(box: anchor))
         .contextMenu {
             Button("Edit…") { edit() }
@@ -189,6 +231,9 @@ private struct CategoryDraftRow: View {
                 .onSubmit { onCommit(draft) }
                 .onExitCommand(perform: onCancel)
         }
+        .padding(.horizontal, Theme.Space.s)
+        .frame(height: 30)
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous))
         .onAppear { focused = true }
     }
 }
