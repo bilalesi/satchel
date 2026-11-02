@@ -8,8 +8,10 @@ Nothing here is part of the app.
 2. `./reset.sh` starts a fresh demo, unlocked on "Personal", the window at its full size (not macOS full screen).
    Update scene: `EXTRA_ENV="SATCHEL_UPDATE_FEED=http://127.0.0.1:8765/feed.json" ./reset.sh`.
 3. `./take.sh NAME SECONDS SCENE.sh` records the screen rectangle of the window while the scene drives it
-   (`tourA`, `syncB`, `updateD`, `customC`, `quickE`).
-4. `python3 cards.py && python3 build_video.py` writes `satchel-promo.mp4` (cut points are in `build_video.py`).
+   (`tourA`, `syncB`, `updateD`, `customC`, `quickE`, `iconsG`; `selectiveF` needs `DEMO_SYNC=1 ./reset.sh`).
+4. `python3 cards.py && python3 design.py render` draws the promo on the GPU (`render.swift`: sub-pixel camera,
+   transitions, captions, magnifiers, 60 fps) from the shot list in `design.py` and writes `satchel-promo-v2.mp4`.
+   (`build_video.py` is the first, ffmpeg-only cut.)
 
 Safety: `ui` only clicks, types or scrolls while the demo is the front app (it brings the demo back first and
 logs every time in `steal.log`); a take with a non-empty log should be thrown away. The update scene never

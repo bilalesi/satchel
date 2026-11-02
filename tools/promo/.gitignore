@@ -5,6 +5,9 @@
 ui
 winsize
 winfind
+render
+timeline.json
+layers/
 steal.log
 cap.log
 concat.txt

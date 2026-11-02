@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 swiftc -O ui.swift -o ui
 swiftc -O winsize.swift -o winsize
 swiftc -O winfind.swift -o winfind
+swiftc -O render.swift -o render
 mkdir -p assets
 sips -s format png --resampleWidth 1024 ../../Resources/AppIcon.icns --out assets/satchel.png >/dev/null
 for app in Dia Arc "Google Chrome" Firefox; do
