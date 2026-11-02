@@ -35,6 +35,7 @@ struct MainWindow: View {
                 }
                 .searchable(text: $query, placement: .sidebar, prompt: "Search")
                 .toolbar {
+                    ToolbarItem(placement: .primaryAction) { UpdateCircle() }
                     // System toolbar styling: macOS draws one glass capsule per item.
                     ToolbarItem(placement: .primaryAction) {
                         ToolbarMenuButton(title: "New", icon: .add) {

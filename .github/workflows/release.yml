@@ -56,6 +56,20 @@ jobs:
       - name: Build universal DMG
         run: UNIVERSAL=1 ./scripts/make-dmg.sh
 
+      - name: Sign the update
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          DMG="build/Satchel-${VERSION}.dmg"
+          if [ -z "${UPDATE_SIGNING_KEY}" ]; then
+            echo "::warning::UPDATE_SIGNING_KEY is not set. The release is published unsigned and installed apps will not offer it as an update."
+            exit 0
+          fi
+          swift scripts/update-key.swift sign "$DMG" > "$DMG.sig"
+          # Prove the signature matches the public key the app ships with before publishing.
+          swift scripts/update-key.swift verify "$DMG" "$DMG.sig" Resources/update-public-key.txt
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -63,12 +77,14 @@ jobs:
           set -euo pipefail
           TAG="v${VERSION}"
           DMG="build/Satchel-${VERSION}.dmg"
+          ASSETS=("$DMG" "$DMG.sha256")
+          [ -f "$DMG.sig" ] && ASSETS+=("$DMG.sig")
           sed "s/__VERSION__/${VERSION}/g" .github/release-notes.md.tmpl > build/notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
             # A re-run of the same commit replaces the assets instead of failing.
-            gh release upload "$TAG" "$DMG" "$DMG.sha256" --clobber
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
-            gh release create "$TAG" "$DMG" "$DMG.sha256" \
+            gh release create "$TAG" "${ASSETS[@]}" \
               --target "$GITHUB_SHA" \
               --title "Satchel ${VERSION}" \
               --notes-file build/notes.md \

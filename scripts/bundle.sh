@@ -45,6 +45,13 @@ fi
 if [ -n "${BUILD_NUMBER:-}" ]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"
 fi
+# Updates: the public half of the release signing key (the private half never enters the repo).
+if [ -s Resources/update-public-key.txt ]; then
+  /usr/libexec/PlistBuddy -c "Set :SatchelUpdatePublicKey $(tr -d '[:space:]' < Resources/update-public-key.txt)" "$APP/Contents/Info.plist"
+fi
+if [ -n "${UPDATE_REPOSITORY:-}" ]; then
+  /usr/libexec/PlistBuddy -c "Set :SatchelUpdateRepository $UPDATE_REPOSITORY" "$APP/Contents/Info.plist"
+fi
 # Browser extension (built by extension/build.sh) ships inside the bundle for "Load unpacked".
 if [ -x extension/build.sh ]; then ./extension/build.sh >/dev/null && cp -R extension/dist "$APP/Contents/Resources/extension"; fi
 # SwiftPM resource bundles (if any) live next to the binary.

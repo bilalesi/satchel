@@ -46,6 +46,8 @@ struct SettingsPage<Content: View>: View {
 // MARK: General
 
 struct GeneralSettings: View {
+    @EnvironmentObject var updates: UpdateManager
+    @AppStorage(UpdateManager.enabledKey) private var autoUpdate = true
     @AppStorage(AppSettings.autoLockMinutesKey) private var autoLock = 10
     @AppStorage(AppSettings.clipboardSecondsKey) private var clipboard = 30
     @AppStorage(AppSettings.hotKeyEnabledKey) private var hotKey = true
@@ -53,7 +55,7 @@ struct GeneralSettings: View {
     @State private var axTrusted = AutoType.isTrusted
 
     var body: some View {
-        SettingsPage(height: autoType ? 390 : 290) {
+        SettingsPage(height: (autoType ? 390 : 290) + (updates.isAvailable ? 120 : 0)) {
             Section {
                 LabeledContent("Lock after") {
                     Dropdown(selection: $autoLock, options: [
@@ -67,6 +69,19 @@ struct GeneralSettings: View {
                         .init(value: 15, title: "15 seconds"), .init(value: 30, title: "30 seconds"),
                         .init(value: 60, title: "60 seconds"), .init(value: 0, title: "Never", subtitle: "Not recommended"),
                     ], minWidth: 190)
+                }
+            }
+            if updates.isAvailable {
+                Section("Updates") {
+                    Toggle("Check for updates automatically", isOn: $autoUpdate)
+                    LabeledContent {
+                        PillButton("Check now", icon: .sync, compact: true) { Task { await updates.check(manual: true) } }
+                            .disabled(updates.state == .checking)
+                    } label: {
+                        Text(updates.message ?? "Version \(updates.currentVersion.description)").font(.callout).foregroundStyle(.secondary)
+                    }
+                    Text("Satchel contacts github.com only to look for a newer release. Updates are verified with a signature before they are installed.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
             }
             Section("Quick Access") {

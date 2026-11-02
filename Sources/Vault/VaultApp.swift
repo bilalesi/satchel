@@ -6,6 +6,7 @@ import VaultCore
 struct VaultApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var session: VaultSession
+    @StateObject private var updates = UpdateManager()
 
     init() {
         AppIdentity.migrateLegacySupportDirectory() // before anything opens the vault
@@ -17,7 +18,8 @@ struct VaultApp: App {
 
     var body: some Scene {
         Window(AppIdentity.name, id: "main") {
-            MainWindow().environmentObject(session).environmentObject(session.sync)
+            MainWindow().environmentObject(session).environmentObject(session.sync).environmentObject(updates)
+                .onAppear { updates.start() }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1040, height: 680)
@@ -30,13 +32,18 @@ struct VaultApp: App {
         }
 
         Settings {
-            SettingsView().environmentObject(session).environmentObject(session.sync)
+            SettingsView().environmentObject(session).environmentObject(session.sync).environmentObject(updates)
         }
 
         MenuBarExtra {
             Button("Quick Access  ⌥ Space") { QuickAccessController.shared.toggle() }
             Button(session.state == .unlocked ? "Lock now" : "Locked") { session.lock() }
                 .disabled(session.state != .unlocked)
+            if case .available(let o) = updates.state {
+                Button("Update to \(o.version.description)…") { Task { await updates.download() } }
+            } else if case .ready(let o, _) = updates.state {
+                Button("Restart to update to \(o.version.description)") { Task { await updates.installAndRelaunch() } }
+            }
             Button("Sync now") { Task { await session.sync.syncNow() } }
                 .disabled(session.state != .unlocked || !session.sync.isConfigured)
             Divider()
@@ -55,6 +62,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var bridge: BridgeServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // One instance per user: a second copy would take over the browser bridge socket and
+        // open the same vault. Hand over to the running one instead.
+        let me = ProcessInfo.processInfo.processIdentifier
+        if let other = NSRunningApplication.runningApplications(withBundleIdentifier: AppIdentity.bundleID).first(where: { $0.processIdentifier != me }) {
+            other.activate()
+            NSApp.terminate(nil)
+            return
+        }
         guard let session = Self.session else { return }
         QuickAccessController.shared.install(session: session)
         let handler = BridgeHandler(session: session)

@@ -1,0 +1,358 @@
+import AppKit
+import Foundation
+import os
+import VaultCore
+
+/// Checks GitHub Releases for a newer signed build, downloads it, verifies the Ed25519
+/// signature against the public key baked into this app, and swaps the app bundle.
+///
+/// Network use is limited to api.github.com (release metadata) and github.com's release
+/// downloads. Nothing about the vault or the user is sent. Turn it off in Settings → General.
+@MainActor
+final class UpdateManager: NSObject, ObservableObject {
+    enum State: Equatable {
+        case idle
+        case checking
+        case available(UpdateOffer)
+        case downloading(UpdateOffer, Double)
+        case ready(UpdateOffer, URL)
+        case installing
+        case failed(String)
+    }
+
+    @Published private(set) var state: State = .idle
+    @Published private(set) var lastChecked: Date?
+    /// Result of the last manual check ("You're up to date"), shown in Settings.
+    @Published private(set) var message: String?
+
+    static let enabledKey = "autoUpdateCheck"
+    private static let log = Logger(subsystem: AppIdentity.bundleID, category: "update")
+    private var timer: Timer?
+    private var downloadTask: URLSessionDownloadTask?
+    private var session: URLSession!
+    private var downloadContinuation: CheckedContinuation<URL, Error>?
+    private var downloadingOffer: UpdateOffer?
+
+    // MARK: Configuration
+
+    private var repository: String {
+        #if DEBUG
+        if let r = ProcessInfo.processInfo.environment["SATCHEL_UPDATE_REPO"] { return r }
+        #endif
+        return Bundle.main.object(forInfoDictionaryKey: "SatchelUpdateRepository") as? String ?? ""
+    }
+
+    private var publicKey: String {
+        #if DEBUG
+        if let k = ProcessInfo.processInfo.environment["SATCHEL_UPDATE_PUBKEY"] { return k }
+        #endif
+        return Bundle.main.object(forInfoDictionaryKey: "SatchelUpdatePublicKey") as? String ?? ""
+    }
+
+    private var feedURL: URL? {
+        #if DEBUG
+        if let f = ProcessInfo.processInfo.environment["SATCHEL_UPDATE_FEED"] { return URL(string: f) }
+        #endif
+        return URL(string: "https://api.github.com/repos/\(repository)/releases/latest")
+    }
+
+    private var allowLocal: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SATCHEL_UPDATE_FEED"] != nil
+        #else
+        return false
+        #endif
+    }
+
+    /// Updates need a repository and a public key; a build without them (a development build)
+    /// never contacts the network for updates.
+    var isAvailable: Bool { !repository.isEmpty && !publicKey.isEmpty }
+
+    var isEnabled: Bool { isAvailable && UserDefaults.standard.bool(forKey: Self.enabledKey) }
+
+    var currentVersion: AppVersion {
+        AppVersion(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0") ?? AppVersion("0")!
+    }
+
+    override init() {
+        super.init()
+        UserDefaults.standard.register(defaults: [Self.enabledKey: true])
+        let cfg = URLSessionConfiguration.default
+        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        session = URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
+    }
+
+    /// Checks shortly after launch and then every six hours, if the user allows it.
+    func start() {
+        guard timer == nil else { return }
+        Task { try? await Task.sleep(for: .seconds(8)); await check(manual: false) }
+        timer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.check(manual: false) }
+        }
+    }
+
+    // MARK: Check
+
+    func check(manual: Bool) async {
+        guard isAvailable else { if manual { message = "Updates are not set up in this build." }; return }
+        guard manual || isEnabled else { return }
+        switch state { case .downloading, .installing, .ready, .checking: return; default: break }
+        if manual { message = nil }
+        let previous = state
+        state = .checking
+        defer { lastChecked = Date() }
+        do {
+            guard let url = feedURL else { throw URLError(.badURL) }
+            var req = URLRequest(url: url)
+            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            req.setValue("\(AppIdentity.name)/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+            req.timeoutInterval = 20
+            let (data, resp) = try await session.data(for: req)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 404 { state = previousOrIdle(previous); if manual { message = "You're up to date." }; return }
+            guard status == 200 else { throw URLError(.badServerResponse) }
+            if let offer = UpdateFeed.parse(data, current: currentVersion, repository: repository, allowLocal: allowLocal) {
+                state = .available(offer)
+                Self.log.notice("update available: \(offer.version.description, privacy: .public)")
+            } else {
+                state = .idle
+                if manual { message = "You're up to date (\(currentVersion))." }
+            }
+        } catch {
+            state = previousOrIdle(previous)
+            Self.log.error("update check failed: \(error.localizedDescription, privacy: .public)")
+            if manual { message = "Could not check for updates: \(error.localizedDescription)" }
+        }
+    }
+
+    private func previousOrIdle(_ s: State) -> State {
+        if case .available = s { return s }
+        return .idle
+    }
+
+    // MARK: Download
+
+    func download() async {
+        let offer: UpdateOffer
+        switch state {
+        case .available(let o): offer = o
+        case .failed: await check(manual: true); guard case .available(let o) = state else { return }; offer = o
+        default: return
+        }
+        state = .downloading(offer, 0)
+        do {
+            let file = try await fetch(offer.dmgURL)
+            let sigData = try await fetchData(offer.signatureURL, maxBytes: 4096)
+            let signature = String(decoding: sigData, as: UTF8.self)
+            let key = publicKey
+            let verified = try await Task.detached(priority: .userInitiated) { () -> Bool in
+                let data = try Data(contentsOf: file, options: .mappedIfSafe)
+                guard data.count == offer.size else { return false }
+                return UpdateSignature.verify(data, signature: signature, publicKey: key)
+            }.value
+            guard verified else {
+                try? FileManager.default.removeItem(at: file)
+                throw UpdateError.badSignature
+            }
+            let kept = try Self.keep(file, as: "Satchel-\(offer.version).dmg")
+            state = .ready(offer, kept)
+        } catch {
+            Self.log.error("update download failed: \(error.localizedDescription, privacy: .public)")
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func fetch(_ url: URL) async throws -> URL {
+        guard allowLocal || UpdateFeed.isAllowedDownloadURL(url) else { throw UpdateError.untrustedURL }
+        return try await withCheckedThrowingContinuation { cont in
+            let task = session.downloadTask(with: url)
+            downloadContinuation = cont
+            downloadTask = task
+            if case .downloading(let o, _) = state { downloadingOffer = o }
+            task.resume()
+        }
+    }
+
+    private func fetchData(_ url: URL, maxBytes: Int) async throws -> Data {
+        guard allowLocal || UpdateFeed.isAllowedDownloadURL(url) else { throw UpdateError.untrustedURL }
+        let (data, resp) = try await session.data(from: url)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count <= maxBytes else { throw UpdateError.badSignature }
+        return data
+    }
+
+    private static func keep(_ temp: URL, as name: String) throws -> URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(AppIdentity.bundleID, isDirectory: true).appendingPathComponent("Updates", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let dest = dir.appendingPathComponent(name)
+        try FileManager.default.moveItem(at: temp, to: dest)
+        return dest
+    }
+
+    // MARK: Install
+
+    /// Replaces this app with the verified one and relaunches. If the app's folder is not
+    /// writable (not an admin user), the DMG is opened for a manual drag instead.
+    func installAndRelaunch() async {
+        guard case .ready(let offer, let dmg) = state else { return }
+        state = .installing
+        let appURL = Bundle.main.bundleURL
+        guard appURL.pathExtension == "app", FileManager.default.isWritableFile(atPath: appURL.deletingLastPathComponent().path) else {
+            NSWorkspace.shared.open(dmg)
+            state = .ready(offer, dmg)
+            message = "Drag Satchel onto Applications to finish updating."
+            return
+        }
+        do {
+            let pid = ProcessInfo.processInfo.processIdentifier
+            let staged = try await Task.detached(priority: .userInitiated) {
+                try Installer.stage(dmg: dmg, nextTo: appURL, expectedVersion: offer.version.description)
+            }.value
+            try Installer.launchSwap(pid: pid, old: appURL, new: staged)
+            NSApp.terminate(nil)
+        } catch {
+            Self.log.error("update install failed: \(error.localizedDescription, privacy: .public)")
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    func dismissFailure() {
+        if case .failed = state { state = .idle }
+    }
+}
+
+enum UpdateError: LocalizedError {
+    case badSignature, untrustedURL, installFailed(String)
+    var errorDescription: String? {
+        switch self {
+        case .badSignature: return "The download failed its signature check and was discarded."
+        case .untrustedURL: return "The update is not hosted where Satchel expects it."
+        case .installFailed(let m): return m
+        }
+    }
+}
+
+// MARK: Download delegate
+
+extension UpdateManager: URLSessionDownloadDelegate, URLSessionTaskDelegate {
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+                                totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        let total = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : Int64(UpdateFeed.maxDownloadBytes)
+        let fraction = min(1, Double(totalBytesWritten) / Double(total))
+        Task { @MainActor in
+            if case .downloading(let o, _) = self.state { self.state = .downloading(o, fraction) }
+        }
+    }
+
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        // The temp file is deleted when this returns: move it somewhere we own first.
+        let owned = FileManager.default.temporaryDirectory.appendingPathComponent("satchel-update-\(UUID().uuidString).dmg")
+        let result: Result<URL, Error>
+        do { try FileManager.default.moveItem(at: location, to: owned); result = .success(owned) } catch { result = .failure(error) }
+        Task { @MainActor in
+            self.downloadContinuation?.resume(with: result)
+            self.downloadContinuation = nil
+        }
+    }
+
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let error else { return }
+        Task { @MainActor in
+            self.downloadContinuation?.resume(throwing: error)
+            self.downloadContinuation = nil
+        }
+    }
+
+    /// A redirect may only lead to GitHub's own hosts, over https.
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                                newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        guard let url = request.url else { return completionHandler(nil) }
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["SATCHEL_UPDATE_FEED"] != nil { return completionHandler(request) }
+        #endif
+        completionHandler(UpdateFeed.isAllowedDownloadURL(url) ? request : nil)
+    }
+}
+
+// MARK: Installer
+
+/// Disk work for an update. Everything here runs off the main thread.
+enum Installer {
+    @discardableResult
+    static func run(_ path: String, _ args: [String]) throws -> String {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let out = Pipe(), err = Pipe()
+        p.standardOutput = out; p.standardError = err
+        try p.run()
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        let errData = err.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else {
+            throw UpdateError.installFailed(String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Mounts the verified DMG, copies the app next to the installed one and checks it.
+    static func stage(dmg: URL, nextTo installed: URL, expectedVersion: String) throws -> URL {
+        let mount = FileManager.default.temporaryDirectory.appendingPathComponent("satchel-mnt-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
+        try run("/usr/bin/hdiutil", ["attach", dmg.path, "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount.path])
+        defer {
+            _ = try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"])
+            try? FileManager.default.removeItem(at: mount)
+        }
+        let source = mount.appendingPathComponent("Satchel.app")
+        guard FileManager.default.fileExists(atPath: source.path) else { throw UpdateError.installFailed("The update does not contain Satchel.app.") }
+        let staged = installed.deletingLastPathComponent().appendingPathComponent(".Satchel-update-\(UUID().uuidString).app")
+        do {
+            try run("/usr/bin/ditto", [source.path, staged.path])
+            try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", staged.path])
+            let plist = NSDictionary(contentsOf: staged.appendingPathComponent("Contents/Info.plist"))
+            guard plist?["CFBundleIdentifier"] as? String == AppIdentity.bundleID,
+                  plist?["CFBundleShortVersionString"] as? String == expectedVersion else {
+                throw UpdateError.installFailed("The update is not the expected version of Satchel.")
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: staged)
+            throw error
+        }
+        return staged
+    }
+
+    /// Starts a detached script that waits for this process to exit, swaps the bundles
+    /// (restoring the old one if anything fails) and opens the new app.
+    static func launchSwap(pid: Int32, old: URL, new: URL) throws {
+        let script = """
+        #!/bin/sh
+        PID="$1"; OLD="$2"; NEW="$3"
+        i=0
+        while kill -0 "$PID" 2>/dev/null; do sleep 0.2; i=$((i+1)); [ $i -gt 150 ] && break; done
+        BACKUP="$OLD.previous-$$"
+        if mv "$OLD" "$BACKUP"; then
+          if mv "$NEW" "$OLD"; then
+            xattr -dr com.apple.quarantine "$OLD" 2>/dev/null
+            rm -rf "$BACKUP"
+          else
+            mv "$BACKUP" "$OLD"
+          fi
+        fi
+        rm -rf "$NEW" 2>/dev/null
+        open "$OLD"
+        rm -f "$0"
+        """
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("satchel-swap-\(UUID().uuidString).sh")
+        try script.write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = [file.path, String(pid), old.path, new.path]
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try p.run()
+    }
+}

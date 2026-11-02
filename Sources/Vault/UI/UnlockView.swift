@@ -15,7 +15,7 @@ struct UnlockView: View {
     var body: some View {
         ZStack {
             Theme.canvas.ignoresSafeArea()
-            VStack { HStack { Spacer(); WorkspaceSwitcher() }.padding(Theme.Space.l); Spacer() }
+            VStack { HStack { UpdateCircle(); Spacer(); WorkspaceSwitcher() }.padding(Theme.Space.l); Spacer() }
             VStack(spacing: Theme.Space.l) {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable().interpolation(.high)

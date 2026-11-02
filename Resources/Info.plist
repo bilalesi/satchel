@@ -26,6 +26,10 @@
 	<string>0.1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>SatchelUpdateRepository</key>
+	<string>bilalesi/satchel</string>
+	<key>SatchelUpdatePublicKey</key>
+	<string></string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>LSApplicationCategoryType</key>
