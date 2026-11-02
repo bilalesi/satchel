@@ -61,7 +61,8 @@ struct Sidebar: View {
                                 count: session.items.filter { $0.categoryID == c.id }.count) { deleting = c }
                 }
                 if draft != nil {
-                    CategoryDraftRow(draft: Binding(get: { draft ?? CategoryDraft() }, set: { draft = $0 }),
+                    // The setter ignores writes once the draft is gone: the field of a removed row writes its text back, which revived it.
+                    CategoryDraftRow(draft: Binding(get: { draft ?? CategoryDraft() }, set: { if draft != nil { draft = $0 } }),
                                      onCommit: commit, onCancel: { draft = nil })
                 }
 
@@ -267,7 +268,11 @@ private struct CategoryDraftRow: View {
         .frame(height: 30)
         .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous))
         .background(AnchorReader(box: anchor))
-        .onAppear { focused = true }
+        // Focus is requested a moment after the row exists: asked in the same pass, the search field kept it.
+        .task {
+            try? await Task.sleep(for: .milliseconds(120))
+            focused = true
+        }
     }
 }
 

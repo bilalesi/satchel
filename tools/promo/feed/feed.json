@@ -1,0 +1,9 @@
+{
+  "tag_name": "v0.2.0",
+  "html_url": "https://github.com/bilalesi/satchel/releases",
+  "body": "Signed update. New: drawn menu icons, a notch card for workspace, sync and update events, a browser extension that survives app moves.",
+  "assets": [
+    { "name": "Satchel-0.2.0.dmg", "browser_download_url": "http://127.0.0.1:8765/Satchel-0.2.0.dmg", "size": 9437184 },
+    { "name": "Satchel-0.2.0.dmg.sig", "browser_download_url": "http://127.0.0.1:8765/Satchel-0.2.0.dmg.sig", "size": 100 }
+  ]
+}

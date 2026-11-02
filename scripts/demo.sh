@@ -39,7 +39,10 @@ defaults write "$ID" allowScreenCapture -bool true
 # Two built-in menu entries in a look of the user's own (see MenuLookStore).
 defaults write "$ID" menuLooks -data "$(printf '%s' '{"favorites":{"icon":"satchel.favorites","color":"pink"},"secureNote":{"icon":"satchel.lock","color":"red"}}' | xxd -p -c0)"
 
-# 4. Launch, unlocked on the first workspace.
-(env SATCHEL_SUPPORT_DIR="$DEMO/support" SATCHEL_DEMO_PASSWORD="demo-password-123" ${=EXTRA_ENV:-} nohup "$APP/Contents/MacOS/Satchel" >"$DEMO/app.log" 2>&1 &)
+# 4. Launch, unlocked on the first workspace. Through LaunchServices (`open -n`), so the app is its own
+# process, not a child of this shell: a script run from a tool or terminal can end without taking it along.
+envargs=(--env "SATCHEL_SUPPORT_DIR=$DEMO/support" --env "SATCHEL_DEMO_PASSWORD=demo-password-123")
+for kv in ${=EXTRA_ENV:-}; do envargs+=(--env "$kv"); done
+open -n -a "$APP" "${envargs[@]}"
 sleep "${WAIT:-8}"
 pgrep -f "$APP/Contents/MacOS/Satchel" | head -1

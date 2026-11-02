@@ -1,0 +1,11 @@
+# Recordings, frames, binaries and generated cards stay local.
+*.mov
+*.mp4
+*.png
+ui
+winsize
+winfind
+steal.log
+cap.log
+concat.txt
+assets/
