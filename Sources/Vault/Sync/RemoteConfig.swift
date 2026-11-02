@@ -43,7 +43,7 @@ enum RemoteConfig: Codable, Equatable {
         case .folder(let url):
             return FolderStore(root: url)
         case .github(let repo):
-            guard let token, !token.isEmpty else { throw SyncError.unauthorized }
+            guard let token, !token.isEmpty else { throw SyncError.missingToken }
             return GitHubStore(repo: repo, token: token)
         }
     }

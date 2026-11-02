@@ -32,6 +32,7 @@ public enum SyncError: Error, Equatable, LocalizedError {
     case network(String)
     case remote(status: Int, message: String)
     case notConfigured
+    case missingToken
 
     public var errorDescription: String? {
         switch self {
@@ -41,6 +42,7 @@ public enum SyncError: Error, Equatable, LocalizedError {
         case .network(let m): return "Network error: \(m)"
         case .remote(let s, let m): return "Remote error \(s): \(m)"
         case .notConfigured: return "No remote configured."
+        case .missingToken: return "No GitHub token is saved on this Mac. Paste it in Settings → Sync."
         }
     }
 }

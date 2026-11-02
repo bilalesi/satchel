@@ -15,18 +15,18 @@ struct UnlockView: View {
     var body: some View {
         ZStack {
             Theme.canvas.ignoresSafeArea()
-            VStack(spacing: 18) {
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 44, weight: .regular))
-                    .foregroundStyle(Theme.accent(.login))
+            VStack(spacing: Theme.Space.l) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable().interpolation(.high)
+                    .frame(width: 96, height: 96)
                 Text(creating ? "Create your vault" : "\(AppIdentity.name) is locked")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(Theme.title)
                 if creating {
                     Text("Pick a long passphrase. It cannot be recovered.")
                         .foregroundStyle(.secondary)
                 }
-                Card(padding: 14) {
-                    VStack(spacing: 10) {
+                Card(padding: Theme.Space.m) {
+                    VStack(spacing: Theme.Space.s) {
                         SecureField("Master password", text: $password)
                             .textFieldStyle(.plain)
                             .focused($focused)
@@ -42,7 +42,7 @@ struct UnlockView: View {
                 }
                 .frame(width: 320)
 
-                HStack(spacing: 10) {
+                HStack(spacing: Theme.Space.s) {
                     if !creating && session.touchIDEnabled {
                         Button {
                             Task { await session.unlockWithBiometrics() }
@@ -65,7 +65,7 @@ struct UnlockView: View {
                     Text(err).font(.callout).foregroundStyle(.red).frame(width: 320)
                 }
             }
-            .padding(40)
+            .padding(Theme.Space.xxl + Theme.Space.s)
         }
         .excludedFromCapture()
         .sheet(isPresented: $connecting) { ConnectVaultView() }

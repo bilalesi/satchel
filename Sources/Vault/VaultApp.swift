@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotKey.shared.setEnabled(UserDefaults.standard.bool(forKey: AppSettings.hotKeyEnabledKey))
         // Every window of this app stays out of screen capture, including ones created later.
         NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { n in
-            (n.object as? NSWindow)?.sharingType = .none
+            if let w = n.object as? NSWindow { MainActor.assumeIsolated { AppSettings.applyCapturePolicy(to: w) } }
         }
     }
 

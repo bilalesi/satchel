@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import VaultCore
 
@@ -8,6 +9,8 @@ enum AppSettings {
     static let vaultPathKey = "vaultPath"
     static let hotKeyEnabledKey = "hotKeyEnabled"
     static let autoTypeEnabledKey = "autoTypeEnabled"
+    /// Off by default: windows are hidden from screenshots and screen sharing.
+    static let allowScreenCaptureKey = "allowScreenCapture"
 
     static let migratedKey = "migratedFromLegacyDefaults"
 
@@ -35,6 +38,16 @@ enum AppSettings {
     static var autoLockMinutes: Int { UserDefaults.standard.integer(forKey: autoLockMinutesKey) }
     static var clipboardSeconds: Int { UserDefaults.standard.integer(forKey: clipboardSecondsKey) }
     static var autoTypeEnabled: Bool { UserDefaults.standard.bool(forKey: autoTypeEnabledKey) }
+    static var allowScreenCapture: Bool { UserDefaults.standard.bool(forKey: allowScreenCaptureKey) }
+
+    /// The one place that decides whether a window may appear in screenshots.
+    @MainActor static func applyCapturePolicy(to window: NSWindow) {
+        window.sharingType = allowScreenCapture ? .readOnly : .none
+    }
+
+    @MainActor static func applyCapturePolicyToAllWindows() {
+        NSApp.windows.forEach(applyCapturePolicy)
+    }
 
     static var vaultURL: URL {
         if let p = UserDefaults.standard.string(forKey: vaultPathKey), !p.isEmpty {

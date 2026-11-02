@@ -1,141 +1,189 @@
 import SwiftUI
 import VaultCore
 
-/// Home screen: Pulse-style cards with one big number each.
+/// Home screen. Responsive: the column count is derived from the measured width so every
+/// row is full (6 type cards → 6, 3 or 2 columns; 4 summary cards → 4, 2 or 1).
 struct OverviewCards: View {
     @EnvironmentObject var session: VaultSession
     @EnvironmentObject var sync: SyncCoordinator
+    var onSelect: (SidebarSelection) -> Void = { _ in }
+    @State private var width: CGFloat = 900
 
-    private let columns = [GridItem(.adaptive(minimum: 220), spacing: 14)]
+    private static let staleDays: Double = 180
+    private static let maxContentWidth: CGFloat = 1180
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Overview").font(.system(size: 20, weight: .semibold)).padding(.bottom, 2)
-                LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(ItemType.allCases) { t in
-                        let items = session.items.filter { $0.type == t }
-                        StatCard(title: t.displayName, symbol: Theme.symbol(t), color: Theme.accent(t),
-                                 value: "\(items.count)", unit: items.count == 1 ? "item" : "items",
-                                 facts: [("Favorites", "\(items.filter(\.favorite).count)"),
-                                         ("Updated 30d", "\(items.filter { $0.updatedAt > .now.addingTimeInterval(-30 * 86400) }.count)")],
-                                 series: weekly(items))
-                    }
-                    StatCard(title: "Secret age", symbol: "hourglass", color: .orange,
-                             value: "\(stale.count)", unit: "older than 180 days",
-                             facts: [("Oldest", oldestLabel), ("Rotate soon", "\(stale.prefix(3).map(\.title).joined(separator: ", "))")],
-                             series: ageBuckets)
-                    StatCard(title: "Sync", symbol: "arrow.triangle.2.circlepath", color: Theme.accent(.webhook),
-                             value: syncValue, unit: syncUnit,
-                             facts: [("Remote", sync.config.displayName),
-                                     ("Generation", "\(session.store?.manifest.generation ?? 0)"),
-                                     ("Last run", lastRun)],
-                             series: [])
-                    StatCard(title: "Security", symbol: "lock.shield", color: Theme.accent(.login),
-                             value: session.touchIDEnabled ? "On" : "Off", unit: "Touch ID",
-                             facts: [("Auto-lock", "\(AppSettings.autoLockMinutes) min"),
-                                     ("Clipboard", "\(AppSettings.clipboardSeconds) s"),
-                                     ("Unreadable", "\(session.corruptIDs.count)")],
-                             series: [])
-                }
-                Card(padding: 14) {
-                    HStack {
-                        Image(systemName: "folder").foregroundStyle(.secondary)
-                        Text(session.vaultURL.path).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([session.vaultURL]) }
-                            .buttonStyle(.borderless).font(.system(size: 11))
+            VStack(alignment: .leading, spacing: Theme.Space.xl) {
+                header
+                grid(columns: summaryColumns) { summaryCards }
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    SectionLabel(text: "By type")
+                    grid(columns: typeColumns) {
+                        ForEach(ItemType.allCases) { typeCard($0) }
                     }
                 }
             }
-            .padding(20)
+            .padding(Theme.Space.xl)
+            .frame(maxWidth: Self.maxContentWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.canvas)
+        // Reason: one width read per layout pass; cheaper than a GeometryReader around the content.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+
+    // MARK: Layout
+
+    private var contentWidth: CGFloat { min(width, Self.maxContentWidth) - Theme.Space.xl * 2 }
+    private var typeColumns: Int { contentWidth >= 1020 ? 6 : contentWidth >= 500 ? 3 : 2 }
+    private var summaryColumns: Int { contentWidth >= 820 ? 4 : contentWidth >= 300 ? 2 : 1 }
+
+    private func grid<C: View>(columns: Int, @ViewBuilder content: () -> C) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Space.m, alignment: .top), count: columns),
+                  alignment: .leading, spacing: Theme.Space.m, content: content)
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            Text("Overview").font(Theme.title)
+            Text(subtitle).font(Theme.body).foregroundStyle(.secondary)
+        }
+    }
+
+    private var subtitle: String {
+        let n = session.items.count
+        let favs = session.items.filter(\.favorite).count
+        return "\(n) \(n == 1 ? "item" : "items") · \(favs) \(favs == 1 ? "favorite" : "favorites")"
+    }
+
+    // MARK: Summary row
+
+    @ViewBuilder
+    private var summaryCards: some View {
+        SummaryCard(title: "Items", symbol: "tray.full", color: Theme.accent(.login),
+                    value: "\(session.items.count)", caption: "\(session.items.filter(\.favorite).count) favorites",
+                    footer: nil, action: { onSelect(.all) })
+        SummaryCard(title: "Rotate soon", symbol: "hourglass", color: Theme.accent(.apiKey),
+                    value: "\(stale.count)", caption: "older than \(Int(Self.staleDays)) days",
+                    footer: stale.isEmpty ? "Everything is fresh" : stale.prefix(2).map(\.title).joined(separator: ", "),
+                    action: stale.isEmpty ? nil : { onSelect(.recent) })
+        SummaryCard(title: "Sync", symbol: "arrow.triangle.2.circlepath", color: syncColor,
+                    value: syncValue, caption: syncCaption, footer: syncFooter, action: nil)
+        SummaryCard(title: "Security", symbol: "lock.shield", color: Theme.accent(.sshKey),
+                    value: session.touchIDEnabled ? "Touch ID" : "Password",
+                    caption: "Locks after \(AppSettings.autoLockMinutes) min",
+                    footer: session.corruptIDs.isEmpty ? "All items readable" : "\(session.corruptIDs.count) unreadable",
+                    action: nil)
+    }
+
+    private var stale: [ItemOverview] {
+        let cutoff = Date().addingTimeInterval(-Self.staleDays * 86400)
+        return session.items.filter { $0.updatedAt < cutoff }.sorted { $0.updatedAt < $1.updatedAt }
+    }
+
+    private var syncColor: Color {
+        switch sync.status {
+        case .error: return .red
+        case .off: return .secondary
+        default: return Theme.accent(.webhook)
+        }
     }
 
     private var syncValue: String {
         switch sync.status {
         case .off: return "Off"
-        case .idle: return sync.lastSyncAt.map { $0.formatted(.relative(presentation: .numeric)) } ?? "Ready"
-        case .syncing: return "…"
+        case .syncing: return "Syncing"
         case .error: return "Error"
+        case .idle: return sync.lastSyncAt == nil ? "Ready" : "Synced"
         }
     }
 
-    private var syncUnit: String {
-        if case .error(let m) = sync.status { return m }
-        return sync.lastSyncAt == nil ? "" : "ago"
+    private var syncCaption: String {
+        switch sync.status {
+        case .error(let m): return m
+        case .off: return "Settings → Sync"
+        default:
+            if let d = sync.lastSyncAt { return d.formatted(.relative(presentation: .named)) }
+            return sync.config.displayName
+        }
     }
 
-    private var lastRun: String {
-        guard let r = sync.lastReport else { return "–" }
-        return "↓\(r.pulled) ↑\(r.pushed)" + (r.conflicts > 0 ? " ⚠︎\(r.conflicts)" : "")
+    private var syncFooter: String? {
+        guard sync.status != .off else { return nil }
+        if let r = sync.lastReport { return "↓ \(r.pulled)   ↑ \(r.pushed)" + (r.conflicts > 0 ? "   merged \(r.conflicts)" : "") }
+        return sync.config.displayName
     }
 
-    private var stale: [ItemOverview] {
-        session.items.filter { $0.updatedAt < .now.addingTimeInterval(-180 * 86400) }.sorted { $0.updatedAt < $1.updatedAt }
+    // MARK: Type cards
+
+    private func typeCard(_ t: ItemType) -> some View {
+        let items = session.items.filter { $0.type == t }
+        return Button { onSelect(.type(t)) } label: {
+            Card(accent: Theme.accent(t), interactive: true) {
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    HStack(spacing: Theme.Space.s) {
+                        IconTile(type: t, size: 22)
+                        Text(t.displayName).font(Theme.headline).lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Space.xs) {
+                        Text("\(items.count)").font(Theme.hero).contentTransition(.numericText())
+                        Text(items.count == 1 ? "item" : "items").font(Theme.caption).foregroundStyle(.secondary)
+                    }
+                    DotMatrix(values: weekly(items), color: Theme.accent(t))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Show \(t.displayName) items")
     }
 
-    private var oldestLabel: String {
-        guard let o = session.items.min(by: { $0.updatedAt < $1.updatedAt }) else { return "–" }
-        return "\(Int(-o.updatedAt.timeIntervalSinceNow / 86400)) d"
-    }
-
-    /// Items updated per week, last 26 weeks, oldest first.
+    /// Items updated per week over the last 16 weeks, oldest first.
     private func weekly(_ items: [ItemOverview]) -> [Int] {
-        var buckets = [Int](repeating: 0, count: 26)
+        var buckets = [Int](repeating: 0, count: 16)
         for i in items {
             let w = Int(-i.updatedAt.timeIntervalSinceNow / (7 * 86400))
-            if w >= 0 && w < 26 { buckets[25 - w] += 1 }
+            if w >= 0 && w < buckets.count { buckets[buckets.count - 1 - w] += 1 }
         }
         return buckets
     }
-
-    /// Items by age in 30-day buckets up to a year.
-    private var ageBuckets: [Int] {
-        var b = [Int](repeating: 0, count: 12)
-        for i in session.items {
-            let m = min(11, max(0, Int(-i.updatedAt.timeIntervalSinceNow / (30 * 86400))))
-            b[m] += 1
-        }
-        return b
-    }
 }
 
-struct StatCard: View {
+/// One summary tile: label, light hero value, one caption, optional footer. Fixed min height
+/// so a row of tiles lines up whatever the text length.
+struct SummaryCard: View {
     let title: String
     let symbol: String
     let color: Color
     let value: String
-    let unit: String
-    let facts: [(String, String)]
-    let series: [Int]
+    let caption: String
+    let footer: String?
+    let action: (() -> Void)?
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(color)
-                    Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(color)
-                    Spacer()
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value).font(Theme.numeral).tracking(-1)
-                    Text(unit).font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(facts, id: \.0) { f in
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(f.0).font(.system(size: 10)).foregroundStyle(.secondary)
-                            Text(f.1).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                        }
-                    }
-                }
-                if !series.isEmpty {
-                    DotMatrix(values: series, color: color).padding(.top, 2)
+        let card = Card(accent: color, interactive: action != nil) {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                Label(title, systemImage: symbol)
+                    .font(Theme.headline).foregroundStyle(color)
+                    .labelStyle(.titleAndIcon)
+                Text(value).font(Theme.hero).lineLimit(1).minimumScaleFactor(0.8)
+                Text(caption).font(Theme.caption).foregroundStyle(.secondary).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if let footer {
+                    Text(footer).font(Theme.caption).foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+        }
+        if let action {
+            Button(action: action) { card }.buttonStyle(.plain)
+        } else {
+            card
         }
     }
 }

@@ -41,6 +41,12 @@ final class VaultSession: ObservableObject {
         autoLock = AutoLock(idleSeconds: { TimeInterval(AppSettings.autoLockMinutes * 60) },
                             onLock: { [weak self] in self?.lock() })
         sync.attach(session: self)
+        #if DEBUG
+        // UI development only: unlock a throwaway demo vault without typing. Compiled out of release builds.
+        if let pw = ProcessInfo.processInfo.environment["SATCHEL_DEMO_PASSWORD"], state == .locked {
+            Task { await unlock(password: pw) }
+        }
+        #endif
     }
 
     /// Second Mac: pull the vault from the remote, then unlock it with the shared password.

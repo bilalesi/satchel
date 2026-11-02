@@ -14,7 +14,7 @@ struct ItemDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
                 header
                 if let details {
                     Card(padding: 0) {
@@ -37,7 +37,10 @@ struct ItemDetailView: View {
                 }
                 meta
             }
-            .padding(20)
+            .padding(Theme.Space.xl)
+            // Readable line length on wide windows; values stay next to their copy buttons.
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.canvas)
         .task(id: overview.updatedAt) { load() }
@@ -47,20 +50,39 @@ struct ItemDetailView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Space.m) {
             IconTile(type: overview.type, size: 40)
             VStack(alignment: .leading, spacing: 2) {
-                Text(overview.title).font(.system(size: 20, weight: .semibold))
-                Text(overview.type.displayName).font(.system(size: 12)).foregroundStyle(Theme.accent(overview.type))
+                Text(overview.title).font(Theme.title).lineLimit(1)
+                Text(overview.type.displayName).font(Theme.caption).foregroundStyle(Theme.accent(overview.type))
             }
-            Spacer()
-            Button { rotate() } label: { Label("Rotate", systemImage: "arrow.triangle.2.circlepath") }
-                .help("Generate a new \(Theme.label(overview.type.primarySecretField).lowercased()); the old one is kept in history")
-                .disabled(details == nil || !ItemType.secretFieldKeys.contains(overview.type.primarySecretField))
-            Button { onEdit() } label: { Label("Edit", systemImage: "pencil") }
-            Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
+            .layoutPriority(1)
+            Spacer(minLength: Theme.Space.s)
+            // Labeled buttons when there is room, icon-only (with tooltips) when narrow.
+            ViewThatFits(in: .horizontal) {
+                actions(labels: true)
+                actions(labels: false)
+            }
         }
     }
+
+    private func actions(labels: Bool) -> some View {
+        HStack(spacing: Theme.Space.s) {
+            Button { rotate() } label: {
+                Label("Rotate", systemImage: "arrow.triangle.2.circlepath").detailLabel(labels)
+            }
+            .help("Generate a new \(Theme.label(overview.type.primarySecretField).lowercased()); the old one is kept in history")
+            .disabled(details == nil || !ItemType.secretFieldKeys.contains(overview.type.primarySecretField))
+            Button { onEdit() } label: {
+                Label("Edit", systemImage: "pencil").detailLabel(labels)
+            }
+            .help("Edit this item")
+            Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
+                .help("Delete this item")
+        }
+        .fixedSize()
+    }
+
 
     private func fieldRow(_ label: String, _ value: String, secret: Bool, key: String = "") -> some View {
         HStack(alignment: .top) {
@@ -87,7 +109,8 @@ struct ItemDetailView: View {
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, Theme.Space.l).padding(.vertical, Theme.Space.m)
+        .hoverHighlight(radius: 0)
         .overlay(alignment: .bottom) { Divider().padding(.leading, 14) }
     }
 
@@ -120,51 +143,61 @@ struct ItemDetailView: View {
                 } label: { Image(systemName: copied == "One-time code" ? "checkmark" : "doc.on.doc") }
                 .buttonStyle(.borderless).foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
+            .padding(.horizontal, Theme.Space.l).padding(.vertical, Theme.Space.m)
+        .hoverHighlight(radius: 0)
             .overlay(alignment: .bottom) { Divider().padding(.leading, 14) }
         }
     }
 
     private var linksCard: some View {
-        Card(padding: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Where it is used").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+        Card(padding: Theme.Space.l) {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                SectionLabel(text: "Where it is used")
                 ForEach(overview.urls, id: \.self) { u in
                     Link(destination: URL(string: u.contains("://") ? u : "https://" + u) ?? URL(fileURLWithPath: "/")) {
-                        Label(u, systemImage: "globe").font(.system(size: 12))
+                        Label(u, systemImage: "globe").font(Theme.body)
+                            .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .hoverHighlight()
                     }
+                    .pointerStyle(.link)
                 }
                 ForEach(overview.bundleIDs, id: \.self) { b in
-                    Label(appName(b), systemImage: "app").font(.system(size: 12))
+                    Label(appName(b), systemImage: "app").font(Theme.body)
+                        .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private func historyCard(_ history: [SecretRevision]) -> some View {
-        Card(padding: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("History").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+        Card(padding: Theme.Space.l) {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                SectionLabel(text: "History").padding(.bottom, Theme.Space.xs)
                 ForEach(Array(history.enumerated()), id: \.offset) { _, rev in
-                    HStack {
-                        Text(Theme.label(rev.field)).font(.system(size: 12))
+                    HStack(spacing: Theme.Space.s) {
+                        Text(Theme.label(rev.field)).font(Theme.body)
                         Text(rev.changedAt, format: .dateTime.day().month().year().hour().minute())
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                            .font(Theme.caption).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Copy") { session.copy(rev.value) }.buttonStyle(.borderless).font(.system(size: 11))
+                        Button("Copy") { session.copy(rev.value) }.buttonStyle(.borderless).font(Theme.caption)
                     }
+                    .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
+                    .hoverHighlight()
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private var meta: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Space.m) {
             Text("Created \(overview.createdAt, format: .dateTime.day().month().year())")
             Text("Updated \(overview.updatedAt, format: .relative(presentation: .named))")
             if !overview.tags.isEmpty { Text(overview.tags.map { "#" + $0 }.joined(separator: " ")) }
         }
-        .font(.system(size: 11)).foregroundStyle(.tertiary)
+        .font(Theme.caption).foregroundStyle(.tertiary)
     }
 
     private func load() {
@@ -183,5 +216,12 @@ struct ItemDetailView: View {
             return FileManager.default.displayName(atPath: url.path)
         }
         return bundleID
+    }
+}
+
+private extension View {
+    /// System label styles keep the title as the accessibility name even when only the icon shows.
+    @ViewBuilder func detailLabel(_ showTitle: Bool) -> some View {
+        if showTitle { labelStyle(.titleAndIcon) } else { labelStyle(.iconOnly) }
     }
 }

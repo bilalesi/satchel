@@ -28,7 +28,7 @@ final class QuickAccessController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
-        panel.sharingType = .none
+        AppSettings.applyCapturePolicy(to: panel)
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true

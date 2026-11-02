@@ -121,6 +121,7 @@ struct QuickAccessView: View {
         .foregroundStyle(isSel ? .white : .primary)
         .background(isSel ? Theme.accent(item.type) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
+        .onHover { if $0 { selected = item.id } }
         .onTapGesture { selected = item.id; act(copyUsername: false) }
     }
 

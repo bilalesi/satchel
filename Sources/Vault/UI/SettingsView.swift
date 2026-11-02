@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.clipboardSecondsKey) private var clipboard = 30
     @AppStorage(AppSettings.hotKeyEnabledKey) private var hotKey = true
     @AppStorage(AppSettings.autoTypeEnabledKey) private var autoType = false
+    @AppStorage(AppSettings.allowScreenCaptureKey) private var allowCapture = false
     @State private var axTrusted = AutoType.isTrusted
     @State private var touchIDPassword = ""
     @State private var askTouchIDPassword = false
@@ -25,6 +26,9 @@ struct SettingsView: View {
                 Picker("Clear clipboard after", selection: $clipboard) {
                     Text("15 seconds").tag(15); Text("30 seconds").tag(30); Text("60 seconds").tag(60); Text("Never").tag(0)
                 }
+                Toggle("Allow screenshots of Satchel windows", isOn: $allowCapture)
+                    .onChange(of: allowCapture) { _, _ in AppSettings.applyCapturePolicyToAllWindows() }
+                    .help("Off keeps every Satchel window out of screenshots, recordings and screen sharing.")
                 Toggle("Quick Access hotkey (⌥ Space)", isOn: $hotKey)
                     .onChange(of: hotKey) { _, on in HotKey.shared.setEnabled(on) }
                 Toggle("Auto-type into other apps (⇧↩ in Quick Access)", isOn: $autoType)

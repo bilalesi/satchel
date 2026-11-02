@@ -21,10 +21,18 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 # Browser extension (built by extension/build.sh) ships inside the bundle for "Load unpacked".
 if [ -x extension/build.sh ]; then ./extension/build.sh >/dev/null && cp -R extension/dist "$APP/Contents/Resources/extension"; fi
 # SwiftPM resource bundles (if any) live next to the binary.
-for b in "$BIN_DIR"/*.bundle; do [ -e "$b" ] && cp -R "$b" "$APP/Contents/Resources/"; done
+cp -R "$BIN_DIR/${NAME}_VaultCore.bundle" "$APP/Contents/Resources/" # PSL data; only this package's bundle
 # Dynamic frameworks produced by dependencies (Clibsodium is static in swift-sodium 0.11; kept for safety).
 for f in "$BIN_DIR"/*.framework; do [ -e "$f" ] && cp -R "$f" "$APP/Contents/Frameworks/"; done
-[ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+# App icon: layered Icon Composer icon compiled to Assets.car (macOS 26 glass, dark, tinted),
+# plus the size-tuned AppIcon.icns from scripts/make-icon.swift as the classic fallback.
+if [ -d Resources/AppIcon.icon ]; then
+  xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" --platform macosx \
+    --minimum-deployment-target 15.0 --app-icon AppIcon \
+    --output-partial-info-plist "$APP/Contents/Resources/.actool-partial.plist" >/dev/null
+  rm -f "$APP/Contents/Resources/.actool-partial.plist"
+fi
+[ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc signature with hardened runtime. Entitlements are deliberately empty: no sandbox
 # (auto-type later), no library-validation bypass, no dyld env vars, no get-task-allow. A stable identifier keeps the designated

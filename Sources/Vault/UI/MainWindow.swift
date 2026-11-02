@@ -54,7 +54,7 @@ struct MainWindow: View {
                 UnlockView()
             }
         }
-        .frame(minWidth: 900, minHeight: 560)
+        .frame(minWidth: 760, minHeight: 520)
         .excludedFromCapture()
         .onChange(of: session.state) { _, s in if s != .unlocked { selectedItem = nil } }
     }
@@ -65,7 +65,7 @@ struct MainWindow: View {
             ItemDetailView(overview: overview, onEdit: { editing = overview })
                 .id(id)
         } else if selection == .home || selection == nil {
-            OverviewCards()
+            OverviewCards(onSelect: { selection = $0 })
         } else {
             ContentUnavailableView("Select an item", systemImage: "key.viewfinder")
                 .background(Theme.canvas)
@@ -185,34 +185,45 @@ struct ItemList: View {
         }
     }
 
+    private var title: String {
+        switch filter {
+        case .home, .all: return "All items"
+        case .favorites: return "Favorites"
+        case .recent: return "Recent"
+        case .type(let t): return t.displayName
+        case .tag(let tag): return "#" + tag
+        }
+    }
+
     var body: some View {
-        List(items, selection: $selectedItem) { item in
-            HStack(spacing: 10) {
-                IconTile(type: item.type, size: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(item.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                        if item.favorite { Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow) }
-                    }
-                    Text(subtitle(item)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+        let list = items
+        List(selection: $selectedItem) {
+            Section {
+                ForEach(list) { item in
+                    ItemRow(item: item)
+                        .tag(item.id)
+                        .contextMenu {
+                            Button("Copy \(Theme.label(item.type.primarySecretField))") { session.copyField(item.type.primarySecretField, of: item.id) }
+                            if let u = item.username { Button("Copy username") { session.copy(u) } }
+                            if item.type == .login { Button("Copy one-time code") { session.copyField("totp", of: item.id) } }
+                            Divider()
+                            Button(item.favorite ? "Remove from favorites" : "Add to favorites") { toggleFavorite(item) }
+                        }
                 }
-                Spacer()
-                Text(item.updatedAt, format: .relative(presentation: .named))
-                    .font(.system(size: 10)).foregroundStyle(.tertiary)
-            }
-            .padding(.vertical, 3)
-            .tag(item.id)
-            .contextMenu {
-                Button("Copy \(Theme.label(item.type.primarySecretField))") { session.copyField(item.type.primarySecretField, of: item.id) }
-                if let u = item.username { Button("Copy username") { session.copy(u) } }
-                Divider()
-                Button(item.favorite ? "Remove from favorites" : "Add to favorites") { toggleFavorite(item) }
+            } header: {
+                HStack {
+                    Text(query.isEmpty ? title : "Results")
+                    Spacer()
+                    Text("\(list.count)").monospacedDigit()
+                }
+                .font(Theme.label).tracking(Theme.labelTracking).textCase(.uppercase)
+                .foregroundStyle(.secondary)
             }
         }
         .listStyle(.inset)
-        .navigationSplitViewColumnWidth(min: 260, ideal: 300)
+        .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
         .overlay {
-            if items.isEmpty {
+            if list.isEmpty {
                 ContentUnavailableView(query.isEmpty ? "No items yet" : "No matches", systemImage: "magnifyingglass")
             }
         }
@@ -226,5 +237,38 @@ struct ItemList: View {
         var o = item
         o.favorite.toggle()
         if let d = try? session.details(item.id) { session.save(o, d) }
+    }
+}
+
+/// One list row. The title gets layout priority; the date uses the narrow style ("2d ago").
+struct ItemRow: View {
+    let item: ItemOverview
+
+    var body: some View {
+        HStack(spacing: Theme.Space.m) {
+            IconTile(type: item.type, size: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: Theme.Space.xs) {
+                    Text(item.title).font(Theme.body.weight(.medium)).lineLimit(1)
+                    if item.favorite {
+                        Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow)
+                    }
+                }
+                if !subtitle.isEmpty {
+                    Text(subtitle).font(Theme.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .layoutPriority(1)
+            Spacer(minLength: Theme.Space.s)
+            Text(item.updatedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
+                .font(Theme.caption).foregroundStyle(.tertiary).monospacedDigit()
+                .lineLimit(1).fixedSize()
+        }
+        .padding(.vertical, Theme.Space.xs)
+        .contentShape(Rectangle())
+    }
+
+    private var subtitle: String {
+        [item.username, item.hosts.first].compactMap { $0 }.joined(separator: " · ")
     }
 }
