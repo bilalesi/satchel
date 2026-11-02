@@ -22,24 +22,21 @@ final class VaultSession: ObservableObject {
     private(set) var store: VaultStore?
     private var index = SearchIndex([])
     private var autoLock: AutoLock?
-    let vaultURL: URL
+    private(set) var vaultURL: URL
     let sync = SyncCoordinator()
+    @Published private(set) var workspaces: [Workspace]
+    @Published private(set) var activeWorkspaceID: UUID
+
+    var activeWorkspace: Workspace { workspaces.first { $0.id == activeWorkspaceID } ?? workspaces[0] }
 
     var touchIDAvailable: Bool { SecureEnclaveSlot.isAvailable }
 
-    init(vaultURL: URL = AppSettings.vaultURL) {
-        self.vaultURL = vaultURL
-        if VaultStore.exists(at: vaultURL) {
-            do {
-                let s = try VaultStore.open(at: vaultURL)
-                store = s
-                touchIDEnabled = s.hasSecureEnclaveSlot
-                state = .locked
-            } catch {
-                lastError = error.localizedDescription
-                state = .noVault
-            }
-        }
+    init() {
+        let loaded = WorkspaceStore.load()
+        workspaces = loaded.list
+        activeWorkspaceID = loaded.active
+        vaultURL = loaded.list.first { $0.id == loaded.active }!.url
+        openVault()
         autoLock = AutoLock(idleSeconds: { TimeInterval(AppSettings.autoLockMinutes * 60) },
                             onLock: { [weak self] in self?.lock() })
         sync.attach(session: self)
@@ -70,12 +67,73 @@ final class VaultSession: ObservableObject {
         return ok
     }
 
+    /// Opens the vault at `vaultURL` (locked), or reports that none exists yet.
+    private func openVault() {
+        store = nil
+        touchIDEnabled = false
+        guard VaultStore.exists(at: vaultURL) else { state = .noVault; return }
+        do {
+            let s = try VaultStore.open(at: vaultURL)
+            store = s
+            touchIDEnabled = s.hasSecureEnclaveSlot
+            state = .locked
+        } catch {
+            lastError = error.localizedDescription
+            state = .noVault
+        }
+    }
+
+    // MARK: Workspaces
+
+    func switchWorkspace(_ id: UUID) {
+        guard id != activeWorkspaceID, let target = workspaces.first(where: { $0.id == id }) else { return }
+        lock()
+        sync.vaultLocked()
+        store = nil
+        items = []; categories = []; corruptIDs = []
+        lastError = nil
+        activeWorkspaceID = id
+        vaultURL = target.url
+        WorkspaceStore.save(workspaces, active: id)
+        openVault()
+    }
+
+    /// Registers an empty workspace and switches to it; the lock screen then offers to create
+    /// or connect its vault.
+    @discardableResult
+    func addWorkspace(named name: String) -> Workspace {
+        let ws = Workspace(id: UUID(), name: name.trimmingCharacters(in: .whitespaces), path: WorkspaceStore.newPath())
+        workspaces.append(ws)
+        WorkspaceStore.save(workspaces, active: activeWorkspaceID)
+        switchWorkspace(ws.id)
+        return ws
+    }
+
+    func renameWorkspace(_ id: UUID, to name: String) {
+        guard let i = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        let clean = name.trimmingCharacters(in: .whitespaces)
+        guard !clean.isEmpty else { return }
+        workspaces[i].name = clean
+        WorkspaceStore.save(workspaces, active: activeWorkspaceID)
+    }
+
+    /// Takes the workspace off this Mac; its folder goes to the Trash. A remote copy is untouched.
+    func removeWorkspace(_ id: UUID) {
+        guard workspaces.count > 1, let ws = workspaces.first(where: { $0.id == id }) else { return }
+        if id == activeWorkspaceID, let other = workspaces.first(where: { $0.id != id }) { switchWorkspace(other.id) }
+        workspaces.removeAll { $0.id == id }
+        WorkspaceStore.save(workspaces, active: activeWorkspaceID)
+        do { if FileManager.default.fileExists(atPath: ws.path) { try FileManager.default.trashItem(at: ws.url, resultingItemURL: nil) } }
+        catch { lastError = error.localizedDescription }
+    }
+
     // MARK: Lock / unlock
 
     func createVault(password: String) async {
         await run {
             let pw = SecureBytes(utf8: password)
-            let s = try await Self.offMain { try VaultStore.create(at: self.vaultURL, password: pw) }
+            let url = self.vaultURL
+            let s = try await Self.offMain { try VaultStore.create(at: url, password: pw) }
             self.store = s
             self.touchIDEnabled = false
             try self.finishUnlock()

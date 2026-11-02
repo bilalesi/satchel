@@ -14,7 +14,7 @@ refresh remove save search settings-gear shield sign-out sparkle star-empty star
 terminal trash unlock verified-filled warning
 git-merge server cloud cloud-upload briefcase home heart bookmark rocket flame law mail comment
 device-mobile credit-card gift book beaker organization layers arrow-down arrow-up debug-restart
-tools library game mortar-board lightbulb coffee package ellipsis diff-added
+tools library game mortar-board lightbulb coffee package ellipsis diff-added arrow-right
 """.split()
 
 root = pathlib.Path(__file__).resolve().parent.parent

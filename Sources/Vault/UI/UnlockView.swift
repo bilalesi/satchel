@@ -15,11 +15,12 @@ struct UnlockView: View {
     var body: some View {
         ZStack {
             Theme.canvas.ignoresSafeArea()
+            VStack { HStack { Spacer(); WorkspaceSwitcher() }.padding(Theme.Space.l); Spacer() }
             VStack(spacing: Theme.Space.l) {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable().interpolation(.high)
                     .frame(width: 96, height: 96)
-                Text(creating ? "Create your vault" : "\(AppIdentity.name) is locked")
+                Text(creating ? "Create the vault for “\(session.activeWorkspace.name)”" : "\(session.activeWorkspace.name) is locked")
                     .font(Theme.title)
                 if creating {
                     Text("Pick a long passphrase. It cannot be recovered.")

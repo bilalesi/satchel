@@ -27,6 +27,11 @@ public enum AppIdentity {
         supportDirectory.appendingPathComponent("default.vault", isDirectory: true)
     }
 
+    /// Folder holding the vaults of additional workspaces.
+    public static var workspacesURL: URL {
+        supportDirectory.appendingPathComponent("workspaces", isDirectory: true)
+    }
+
     /// Unix socket the native messaging host talks to.
     public static var bridgeSocketURL: URL {
         supportDirectory.appendingPathComponent("bridge.sock")

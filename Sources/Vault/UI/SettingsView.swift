@@ -196,7 +196,8 @@ struct VaultSettings: View {
     @EnvironmentObject var session: VaultSession
 
     var body: some View {
-        SettingsPage(height: 340) {
+        SettingsPage(height: 420 + CGFloat(session.workspaces.count) * 36) {
+            WorkspaceManager()
             Section("Location") {
                 LabeledContent("Folder") {
                     Text(session.vaultURL.path)

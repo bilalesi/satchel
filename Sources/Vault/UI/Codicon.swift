@@ -6,6 +6,7 @@ enum Codicon: UInt32, CaseIterable, Sendable {
     case add = 0xEA60
     case archive = 0xEA98
     case arrowDown = 0xEA9A
+    case arrowRight = 0xEA9C
     case arrowUp = 0xEAA1
     case beaker = 0xEA79
     case book = 0xEAA4

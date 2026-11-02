@@ -159,6 +159,10 @@ struct Sidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack { WorkspaceSwitcher(); Spacer() }
+                .padding(.horizontal, Theme.Space.m).padding(.bottom, Theme.Space.xs)
+        }
         .safeAreaInset(edge: .bottom) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
