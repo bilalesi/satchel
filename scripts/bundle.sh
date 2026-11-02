@@ -25,7 +25,6 @@ if [ "${UNIVERSAL:-0}" = "1" ]; then
   for bin in "$NAME" satchel-host; do
     lipo -create "${DIRS[1]}/$bin" "${DIRS[2]}/$bin" -output "$BIN_DIR/$bin"
   done
-  cp -R "${DIRS[1]}/${NAME}_VaultCore.bundle" "$BIN_DIR/" # resources are architecture-independent
 else
   swift build -c "$CONFIG" --product "$NAME" 2>&1 | tail -3
   swift build -c "$CONFIG" --product satchel-host 2>&1 | tail -1
@@ -54,8 +53,6 @@ if [ -n "${UPDATE_REPOSITORY:-}" ]; then
 fi
 # Browser extension (built by extension/build.sh) ships inside the bundle for "Load unpacked".
 if [ -x extension/build.sh ]; then ./extension/build.sh >/dev/null && cp -R extension/dist "$APP/Contents/Resources/extension"; fi
-# SwiftPM resource bundles (if any) live next to the binary.
-cp -R "$BIN_DIR/${NAME}_VaultCore.bundle" "$APP/Contents/Resources/" # PSL data; only this package's bundle
 # Dynamic frameworks produced by dependencies (Clibsodium is static in swift-sodium 0.11; kept for safety).
 for f in "$BIN_DIR"/*.framework; do [ -e "$f" ] && cp -R "$f" "$APP/Contents/Frameworks/"; done
 # App icon: layered Icon Composer icon compiled to Assets.car (macOS 26 glass, dark, tinted),
@@ -78,5 +75,7 @@ codesign --force --deep --sign - \
   --entitlements Resources/Satchel.entitlements \
   --options runtime \
   "$APP"
+# No code may depend on a SwiftPM resource bundle (its lookup falls back to the build machine's path).
+if strings "$APP/Contents/MacOS/$NAME" | grep -q "_VaultCore.bundle"; then echo "binary references a SwiftPM resource bundle" >&2; exit 1; fi
 codesign --verify --strict "$APP"
 echo "Built $APP ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist"), archs: $(lipo -archs "$APP/Contents/MacOS/$NAME"))"

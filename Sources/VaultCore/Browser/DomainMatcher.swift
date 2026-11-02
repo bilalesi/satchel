@@ -9,12 +9,7 @@ public struct DomainMatcher: Sendable {
     private let exceptions: Set<String>  // "www.ck" for the rule "!www.ck"
 
     /// The bundled list (ICANN + private sections), parsed once (~16k rules, a few ms).
-    public static let shared: DomainMatcher = {
-        let url = Bundle.module.url(forResource: "public_suffix_list", withExtension: "dat", subdirectory: "Resources")
-            ?? Bundle.module.url(forResource: "public_suffix_list", withExtension: "dat")
-        let text = url.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
-        return DomainMatcher(rules: text)
-    }()
+    public static let shared = DomainMatcher(rules: PublicSuffixData.rules)
 
     public init(rules text: String) {
         var r = Set<String>(), w = Set<String>(), e = Set<String>()
