@@ -50,20 +50,19 @@ final class VaultSession: ObservableObject {
     }
 
     /// Second Mac: pull the vault from the remote, then unlock it with the shared password.
-    func connectExisting(config: RemoteConfig, token: String?, password: String) async -> Bool {
+    func connectExisting(config: RemoteConfig, secret: String?, password: String) async -> Bool {
         var ok = false
         await run {
-            let remote = try config.makeStore(token: token)
+            let remote = try config.makeStore(secret: secret)
             let pw = SecureBytes(utf8: password)
             let url = self.vaultURL
             let s = try await Task.detached(priority: .userInitiated) {
                 try await SyncEngine.bootstrap(remote: remote, into: url, password: pw)
             }.value
-            if let token, !token.isEmpty { try s.setLocalSecret(RemoteConfig.tokenSecretName, token) }
             self.store = s
             self.touchIDEnabled = false
             try self.finishUnlock()
-            self.sync.config = config
+            try self.sync.apply(config, secret: secret)
             ok = true
         }
         return ok
@@ -119,6 +118,7 @@ final class VaultSession: ObservableObject {
     func lock() {
         guard state == .unlocked else { return }
         store?.lock()
+        sync.vaultLocked()
         items = []
         index = SearchIndex([])
         state = .locked
@@ -127,6 +127,7 @@ final class VaultSession: ObservableObject {
     private func finishUnlock() throws {
         state = .unlocked
         try reload()
+        if let store { sync.vaultUnlocked(store) }
         sync.requestSync(reason: "unlock", delay: 0)
     }
 

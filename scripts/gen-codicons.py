@@ -12,6 +12,9 @@ dashboard database edit error extensions eye eye-closed folder folder-opened git
 history inbox info key link link-external lock note pass-filled plug pulse radio-tower record
 refresh remove save search settings-gear shield sign-out sparkle star-empty star-full sync tag
 terminal trash unlock verified-filled warning
+git-merge server cloud cloud-upload briefcase home heart bookmark rocket flame law mail comment
+device-mobile credit-card gift book beaker organization layers arrow-down arrow-up debug-restart
+tools library game mortar-board lightbulb coffee package ellipsis diff-added
 """.split()
 
 root = pathlib.Path(__file__).resolve().parent.parent

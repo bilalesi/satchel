@@ -5,14 +5,39 @@ import VaultCore
 /// Draft of a remote configuration, edited in Settings and in the Connect sheet.
 struct RemoteDraft: Equatable {
     enum Backend: String, CaseIterable, Identifiable {
-        case off, folder, github
+        case off, folder, github, git, webdav, s3
         var id: String { rawValue }
         var title: String {
-            switch self { case .off: return "Off"; case .folder: return "Folder"; case .github: return "GitHub" }
+            switch self {
+            case .off: return "Off"
+            case .folder: return "Synced folder"
+            case .github: return "GitHub"
+            case .git: return "Git (SSH)"
+            case .webdav: return "WebDAV"
+            case .s3: return "S3-compatible"
+            }
+        }
+
+        var subtitle: String? {
+            switch self {
+            case .off: return "Keep the vault on this Mac only"
+            case .folder: return "iCloud Drive, Dropbox, a network share"
+            case .github: return "A private repository, with a token"
+            case .git: return "Any git host, using your SSH keys"
+            case .webdav: return "Nextcloud, Synology, a NAS"
+            case .s3: return "AWS S3, Cloudflare R2, MinIO, Backblaze"
+            }
         }
 
         var icon: Codicon {
-            switch self { case .off: return .circleSlash; case .folder: return .folder; case .github: return .github }
+            switch self {
+            case .off: return .circleSlash
+            case .folder: return .folder
+            case .github: return .github
+            case .git: return .gitMerge
+            case .webdav: return .server
+            case .s3: return .cloud
+            }
         }
     }
 
@@ -22,7 +47,15 @@ struct RemoteDraft: Equatable {
     var repo = ""
     var branch = "main"
     var prefix = ""
-    var token = ""
+    var gitURL = ""
+    var davURL = ""
+    var davUser = ""
+    var s3Endpoint = ""
+    var s3Region = ""
+    var s3Bucket = ""
+    var s3AccessKey = ""
+    /// Token, password or secret key typed in this session. Never read back from the vault.
+    var secret = ""
 
     init() {}
 
@@ -31,6 +64,9 @@ struct RemoteDraft: Equatable {
         case .off: backend = .off
         case .folder(let url): backend = .folder; folderPath = url.path
         case .github(let r): backend = .github; owner = r.owner; repo = r.name; branch = r.branch; prefix = r.prefix
+        case .git(let g): backend = .git; gitURL = g.url; branch = g.branch; prefix = g.prefix
+        case .webdav(let url, let user): backend = .webdav; davURL = url.absoluteString; davUser = user
+        case .s3(let c): backend = .s3; s3Endpoint = c.endpoint; s3Region = c.region; s3Bucket = c.bucket; prefix = c.prefix; s3AccessKey = c.accessKeyID
         }
     }
 
@@ -39,10 +75,15 @@ struct RemoteDraft: Equatable {
         case .off: return true
         case .folder: return !folderPath.isEmpty
         case .github: return !owner.isEmpty && !repo.isEmpty
+        case .git: return GitConfig(url: gitURL, branch: branch, prefix: prefix).isValid
+        case .webdav: return URL(string: davURL)?.host != nil && !davUser.isEmpty
+        case .s3: return URL(string: s3Endpoint)?.host != nil && !s3Bucket.isEmpty && !s3AccessKey.isEmpty
         }
     }
 
-    /// Builds the config. The token is handed to the caller, who stores it in the vault.
+    /// Whether a credential has to exist (typed now or saved earlier) for this backend.
+    var needsSecret: Bool { [.github, .webdav, .s3].contains(backend) }
+
     func commit() -> RemoteConfig {
         switch backend {
         case .off:
@@ -51,6 +92,24 @@ struct RemoteDraft: Equatable {
             return .folder(URL(fileURLWithPath: (folderPath as NSString).expandingTildeInPath, isDirectory: true))
         case .github:
             return .github(GitHubRepo(owner: owner, name: repo, branch: branch, prefix: prefix))
+        case .git:
+            return .git(GitConfig(url: gitURL, branch: branch, prefix: prefix))
+        case .webdav:
+            return .webdav(url: URL(string: davURL.trimmingCharacters(in: .whitespaces)) ?? URL(string: "https://invalid")!, username: davUser)
+        case .s3:
+            return .s3(S3Config(endpoint: s3Endpoint, region: s3Region, bucket: s3Bucket, prefix: prefix, accessKeyID: s3AccessKey))
+        }
+    }
+
+    /// Height of the form in Settings, so the window never shows empty space.
+    var settingsHeight: CGFloat {
+        switch backend {
+        case .off: return 250
+        case .folder: return 330
+        case .github: return 470
+        case .git: return 450
+        case .webdav: return 440
+        case .s3: return 560
         }
     }
 }
@@ -59,20 +118,20 @@ struct RemoteDraft: Equatable {
 struct RemoteDraftFields: View {
     @Binding var draft: RemoteDraft
     var allowOff = true
-    var tokenSaved = false
+    var secretSaved = false
 
     var body: some View {
-        LabeledContent("Remote") {
-            CapsuleSegmented(selection: $draft.backend, options: RemoteDraft.Backend.allCases
+        LabeledContent("Sync method") {
+            Dropdown(selection: $draft.backend, options: RemoteDraft.Backend.allCases
                 .filter { allowOff || $0 != .off }
-                .map { .init(value: $0, title: $0.title, icon: $0.icon) })
+                .map { .init(value: $0, title: $0.title, icon: $0.icon, subtitle: $0.subtitle) }, minWidth: 220)
         }
         switch draft.backend {
         case .off:
             Text("The vault stays on this Mac only.").foregroundStyle(.secondary)
         case .folder:
             HStack(spacing: Theme.Space.s) {
-                TextField("Folder", text: $draft.folderPath, prompt: Text("~/Library/Mobile Documents/com~apple~CloudDocs/Vault"))
+                TextField("Folder", text: $draft.folderPath, prompt: Text("~/Library/Mobile Documents/com~apple~CloudDocs/Satchel"))
                 PillButton("Choose", icon: .folderOpened, compact: true) { choose() }
             }
             Text("Any synced folder works: iCloud Drive, Dropbox, a network share.").font(.callout).foregroundStyle(.secondary)
@@ -81,11 +140,36 @@ struct RemoteDraftFields: View {
             TextField("Repository", text: $draft.repo, prompt: Text("private repository name"))
             TextField("Branch", text: $draft.branch)
             TextField("Folder in repository (optional)", text: $draft.prefix)
-            SecureField("Fine-grained token", text: $draft.token,
-                        prompt: Text(tokenSaved ? "saved (encrypted in the vault); paste to replace" : "github_pat_…"))
-            Text("github.com → Settings → Developer settings → Fine-grained tokens. Limit it to this repository with Contents: Read and write. Stored encrypted next to the vault, never synced.")
-                .font(.callout).foregroundStyle(.secondary)
+            secretField("Fine-grained token", placeholder: "github_pat_…")
+            hint("github.com → Settings → Developer settings → Fine-grained tokens. Limit it to this repository with Contents: Read and write. Stored encrypted in the vault, never synced.")
+        case .git:
+            TextField("Repository address", text: $draft.gitURL, prompt: Text("git@github.com:you/vault.git"))
+            TextField("Branch", text: $draft.branch)
+            TextField("Folder in repository (optional)", text: $draft.prefix)
+            hint("Uses the git and SSH keys already set up on this Mac. If the key has a passphrase, add it to the agent once: ssh-add --apple-use-keychain. Use a private repository.")
+        case .webdav:
+            TextField("Folder address", text: $draft.davURL, prompt: Text("https://cloud.example.com/remote.php/dav/files/you/Satchel"))
+            TextField("Username", text: $draft.davUser)
+            secretField("Password", placeholder: "app password")
+            hint("Use an app password, not your account password. The folder must exist or be creatable. The server must be reached over https.")
+        case .s3:
+            TextField("Endpoint", text: $draft.s3Endpoint, prompt: Text("https://s3.eu-west-1.amazonaws.com"))
+            TextField("Region", text: $draft.s3Region, prompt: Text("us-east-1; \"auto\" for Cloudflare R2"))
+            TextField("Bucket", text: $draft.s3Bucket)
+            TextField("Folder in bucket (optional)", text: $draft.prefix)
+            TextField("Access key ID", text: $draft.s3AccessKey)
+            secretField("Secret access key", placeholder: "secret key")
+            hint("Create a key limited to this bucket. Satchel checks that the service protects against overwriting changes from another device and refuses services that do not.")
         }
+    }
+
+    private func secretField(_ title: String, placeholder: String) -> some View {
+        SecureField(title, text: $draft.secret,
+                    prompt: Text(secretSaved ? "saved (encrypted in the vault); type to replace" : placeholder))
+    }
+
+    private func hint(_ text: String) -> some View {
+        Text(text).font(.callout).foregroundStyle(.secondary)
     }
 
     private func choose() {
@@ -104,11 +188,12 @@ struct SyncSettings: View {
     @State private var draft = RemoteDraft()
     @State private var message: String?
     @State private var testing = false
+    @State private var saving = false
 
     var body: some View {
         SettingsPage(height: pageHeight) {
             Section {
-                RemoteDraftFields(draft: $draft, tokenSaved: sync.hasToken)
+                RemoteDraftFields(draft: $draft, secretSaved: sync.hasSecret(for: draft.commit()))
             }
             Section {
                 syncControls
@@ -120,14 +205,7 @@ struct SyncSettings: View {
         .onAppear { draft = RemoteDraft(sync.config) }
     }
 
-    /// Sized to the form of the selected remote so the window never shows empty space.
-    private var pageHeight: CGFloat {
-        switch draft.backend {
-        case .off: return 250
-        case .folder: return 330
-        case .github: return 470
-        }
-    }
+    private var pageHeight: CGFloat { draft.settingsHeight + (sync.isConfigured ? 150 : 0) }
 
     private var syncControls: some View {
         HStack(spacing: Theme.Space.s) {
@@ -135,7 +213,7 @@ struct SyncSettings: View {
                 .disabled(!draft.isComplete || draft.backend == .off || testing)
                 .help("Check the remote is reachable with these settings")
             PillButton("Save", icon: .save, kind: .primary) { save() }
-                .disabled(!draft.isComplete || draft == RemoteDraft(sync.config) && draft.token.isEmpty)
+                .disabled(!draft.isComplete || saving || draft == RemoteDraft(sync.config) && draft.secret.isEmpty)
             Spacer()
             PillButton("Sync now", icon: .sync) { Task { await sync.syncNow() } }
                 .disabled(!sync.isConfigured || session.state != .unlocked || sync.status == .syncing)
@@ -169,16 +247,21 @@ struct SyncSettings: View {
     private func test() async {
         testing = true
         defer { testing = false }
-        message = await sync.test(draft.commit(), token: draft.token)
+        message = await sync.test(draft.commit(), secret: draft.secret)
     }
 
     private func save() {
-        do {
-            if !draft.token.isEmpty { try sync.saveToken(draft.token) }
-            sync.config = draft.commit()
-            draft.token = ""
-            message = "Saved."
-        } catch { message = error.localizedDescription }
+        Task {
+            saving = true
+            defer { saving = false }
+            let config = draft.commit()
+            do {
+                if config.needsConditionalWriteProbe { _ = try await sync.check(config, typedSecret: draft.secret) }
+                try sync.apply(config, secret: draft.secret)
+                draft.secret = ""
+                message = "Saved."
+            } catch { message = SyncCoordinator.describe(error, config: config) }
+        }
     }
 }
 
@@ -213,7 +296,7 @@ struct ConnectVaultView: View {
                 PillButton("Cancel", icon: .close, kind: .ghost) { dismiss() }.keyboardShortcut(.cancelAction)
                 PillButton("Connect", icon: .cloudDownload, kind: .primary) { Task { await connect() } }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!draft.isComplete || password.isEmpty || session.busy || (draft.backend == .github && draft.token.isEmpty))
+                    .disabled(!draft.isComplete || password.isEmpty || session.busy || (draft.needsSecret && draft.secret.isEmpty))
             }
             .padding(14)
         }
@@ -223,7 +306,7 @@ struct ConnectVaultView: View {
 
     private func connect() async {
         message = nil
-        if await session.connectExisting(config: draft.commit(), token: draft.token, password: password) {
+        if await session.connectExisting(config: draft.commit(), secret: draft.secret, password: password) {
             password = ""
             dismiss()
         } else {

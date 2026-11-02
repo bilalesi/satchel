@@ -166,16 +166,4 @@ final class GitHubStoreTests: XCTestCase {
         XCTAssertEqual(r.prefix, "vault/")
         XCTAssertEqual(GitHubRepo(owner: "a", name: "b").prefix, "")
     }
-
-    func testKeychainRoundTripIfEnabled() throws {
-        try XCTSkipUnless(ProcessInfo.processInfo.environment["VAULT_KEYCHAIN_TEST"] == "1", "touches the login keychain")
-        let service = "com.bilalesi.vault.test.\(UUID().uuidString)"
-        XCTAssertNil(KeychainToken.load(service: service))
-        try KeychainToken.save("one", service: service)
-        XCTAssertEqual(KeychainToken.load(service: service), "one")
-        try KeychainToken.save("two", service: service)
-        XCTAssertEqual(KeychainToken.load(service: service), "two")
-        KeychainToken.delete(service: service)
-        XCTAssertNil(KeychainToken.load(service: service))
-    }
 }

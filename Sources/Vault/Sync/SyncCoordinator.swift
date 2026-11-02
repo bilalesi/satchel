@@ -6,6 +6,9 @@ import VaultCore
 /// Decides *when* to sync; `SyncEngine` decides *what*. One run at a time, a request
 /// during a run sets a dirty flag and re-runs once. Triggers: 2 s after a local change,
 /// on unlock, every 15 minutes, on network regain, on config change.
+///
+/// The configuration and the "what to sync" selection belong to the unlocked vault (they are
+/// stored encrypted inside it), so the coordinator loads them on unlock and forgets them on lock.
 @MainActor
 final class SyncCoordinator: ObservableObject {
     enum Status: Equatable {
@@ -15,15 +18,8 @@ final class SyncCoordinator: ObservableObject {
     @Published private(set) var status: Status = .off
     @Published private(set) var lastSyncAt: Date?
     @Published private(set) var lastReport: SyncReport?
-    @Published var config: RemoteConfig {
-        didSet {
-            guard config != oldValue else { return }
-            config.persist()
-            status = config == .off ? .off : .idle
-            lastReport = nil
-            requestSync(reason: "configuration changed", delay: 0)
-        }
-    }
+    @Published private(set) var config: RemoteConfig = .off
+    @Published private(set) var selection = SyncSelection()
 
     private static let log = Logger(subsystem: AppIdentity.bundleID, category: "sync")
     private weak var session: VaultSession?
@@ -35,8 +31,6 @@ final class SyncCoordinator: ObservableObject {
     private var online = true
 
     init() {
-        config = RemoteConfig.load()
-        status = config == .off ? .off : .idle
         periodic = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.requestSync(reason: "periodic", delay: 0) }
         }
@@ -57,6 +51,73 @@ final class SyncCoordinator: ObservableObject {
     }
 
     var isConfigured: Bool { config != .off }
+
+    // MARK: Vault lifecycle
+
+    /// Loads this vault's configuration and selection. Called right after unlock.
+    func vaultUnlocked(_ store: VaultStore) {
+        adoptLegacyConfig(into: store)
+        config = RemoteConfig.load(from: store)
+        selection = Self.loadSelection(store)
+        status = config == .off ? .off : .idle
+        lastReport = nil
+        lastSyncAt = (try? store.loadSyncState())?.lastSyncAt
+    }
+
+    /// Builds before 0.2 kept the sync setting in UserDefaults for the whole app. The first vault
+    /// unlocked afterwards takes it over, so an update does not switch sync off.
+    private func adoptLegacyConfig(into store: VaultStore) {
+        let key = "remoteConfig"
+        guard let data = UserDefaults.standard.data(forKey: key) else { return }
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        guard RemoteConfig.load(from: store) == .off, let legacy = try? JSONDecoder().decode(RemoteConfig.self, from: data) else { return }
+        try? legacy.persist(to: store)
+    }
+
+    /// Forgets everything that came from the vault and stops pending work.
+    func vaultLocked() {
+        debounce?.cancel()
+        config = .off
+        selection = SyncSelection()
+        status = .off
+        lastReport = nil
+    }
+
+    private static func loadSelection(_ store: VaultStore) -> SyncSelection {
+        guard let json = try? store.localSecret(SyncSelection.secretName), let data = json.data(using: .utf8),
+              let s = try? JSONDecoder().decode(SyncSelection.self, from: data) else { return SyncSelection() }
+        return s
+    }
+
+    // MARK: Changing settings
+
+    /// Saves a new remote (and its credential) for this vault and syncs.
+    func apply(_ newConfig: RemoteConfig, secret: String?) throws {
+        guard let store = session?.store, store.isUnlocked else { throw VaultError.locked }
+        if let name = newConfig.secretName, let secret, !secret.isEmpty { try store.setLocalSecret(name, secret) }
+        try newConfig.persist(to: store)
+        config = newConfig
+        status = newConfig == .off ? .off : .idle
+        lastReport = nil
+        requestSync(reason: "configuration changed", delay: 0)
+    }
+
+    func updateSelection(_ new: SyncSelection) {
+        guard let store = session?.store, store.isUnlocked, new != selection else { return }
+        do {
+            if new.isDefault { try store.setLocalSecret(SyncSelection.secretName, nil) }
+            else { try store.setLocalSecret(SyncSelection.secretName, String(decoding: try JSONEncoder().encode(new), as: UTF8.self)) }
+            selection = new
+            requestSync(reason: "selection changed", delay: 1)
+        } catch { session?.lastError = error.localizedDescription }
+    }
+
+    func hasSecret(for config: RemoteConfig) -> Bool {
+        guard let name = config.secretName, let store = session?.store, store.isUnlocked else { return false }
+        return ((try? store.localSecret(name)) ?? nil) != nil
+    }
+
+    // MARK: Running
 
     /// Coalesces bursts of local edits into one run.
     func requestSync(reason: String, delay: TimeInterval = 2) {
@@ -88,11 +149,10 @@ final class SyncCoordinator: ObservableObject {
         Self.log.notice("sync start: \(self.config.displayName, privacy: .public)")
         do {
             let config = self.config
-            // Token lookup and the whole run stay off the main thread (Keychain migration may prompt).
+            let selection = self.selection
             let report = try await Task.detached(priority: .utility) {
-                let token = config.needsToken ? try RemoteConfig.resolveToken(store: store) : nil
-                let remote = try config.makeStore(token: token)
-                return try await SyncEngine(store: store, remote: remote).sync()
+                let remote = try config.makeStore(secret: try config.resolveSecret(store: store))
+                return try await SyncEngine(store: store, remote: remote, filter: selection).sync()
             }.value
             lastReport = report
             lastSyncAt = Date()
@@ -100,46 +160,54 @@ final class SyncCoordinator: ObservableObject {
             Self.log.notice("sync ok: pulled \(report.pulled) pushed \(report.pushed) conflicts \(report.conflicts) generation \(report.generation)")
             if report.pulled > 0 || report.conflicts > 0 { try session.reload() }
         } catch {
-            let text = Self.describe(error)
+            let text = Self.describe(error, config: config)
             Self.log.error("sync failed: \(text, privacy: .public)")
             status = .error(text)
         }
     }
 
-    /// Stores the GitHub token encrypted in the vault directory.
-    func saveToken(_ token: String) throws {
-        guard let store = session?.store, store.isUnlocked else { throw VaultError.locked }
-        try store.setLocalSecret(RemoteConfig.tokenSecretName, token)
-    }
+    // MARK: Testing a configuration
 
-    var hasToken: Bool {
-        guard let store = session?.store, store.isUnlocked else { return false }
-        return (try? store.localSecret(RemoteConfig.tokenSecretName)) != nil
-    }
+    /// Verifies a configuration is usable and safe: reachable, signed in, and (for HTTP object
+    /// stores) enforcing conditional writes. Returns a sentence for the user, throws on failure.
+    func check(_ config: RemoteConfig, typedSecret: String?) async throws -> String {
+        let store = session?.store
+        let remote = try await Task.detached { () throws -> RemoteStore in
+            var secret = typedSecret?.isEmpty == false ? typedSecret : nil
+            if secret == nil, let store { secret = try config.resolveSecret(store: store) }
+            return try config.makeStore(secret: secret)
+        }.value
 
-    /// "Test connection" in settings. Returns a human sentence.
-    func test(_ config: RemoteConfig, token typed: String?) async -> String {
-        do {
-            let store = session?.store
-            let remote = try await Task.detached { () throws -> RemoteStore in
-                var token = typed?.isEmpty == false ? typed : nil
-                if token == nil, config.needsToken, let store { token = try RemoteConfig.resolveToken(store: store) }
-                return try config.makeStore(token: token)
-            }.value
-            if let gh = remote as? GitHubStore {
-                let name = try await gh.verify()
-                let hasVault = try await gh.get(RemotePaths.manifest) != nil
-                return "Connected to \(name). " + (hasVault ? "A vault is already there." : "No vault there yet; the first sync will create it.")
+        var lines: [String] = []
+        switch remote {
+        case let gh as GitHubStore: lines.append("Connected to \(try await gh.verify()).")
+        case let dav as WebDAVStore: try await dav.verify(); lines.append("Signed in to \(dav.baseURL.host ?? "the server").")
+        case let s3 as S3Store: try await s3.verify(); lines.append("Bucket \(s3.config.bucket) is reachable.")
+        case let git as GitStore: try await git.verify(); lines.append("Repository is reachable.")
+        default: lines.append("Folder reachable.")
+        }
+        if config.needsConditionalWriteProbe {
+            switch try await remote.probeConditionalWrites() {
+            case .enforced: lines.append("The server protects against overwriting changes from another device.")
+            case .notEnforced(let why):
+                throw SyncError.remote(status: 0, message: "This server does not protect against two devices overwriting each other (\(why)). Satchel will not use it. Pick a different server or another sync method.")
             }
-            let hasVault = try await remote.get(RemotePaths.manifest) != nil
-            return "Folder reachable. " + (hasVault ? "A vault is already there." : "No vault there yet.")
-        } catch {
-            Self.log.error("test connection failed: \(Self.describe(error), privacy: .public)")
-            return Self.describe(error)
+        }
+        let hasVault = try await remote.get(RemotePaths.manifest) != nil
+        lines.append(hasVault ? "A vault is already there." : "No vault there yet; the first sync creates it.")
+        return lines.joined(separator: " ")
+    }
+
+    func test(_ config: RemoteConfig, secret: String?) async -> String {
+        do { return try await check(config, typedSecret: secret) }
+        catch {
+            let text = Self.describe(error, config: config)
+            Self.log.error("test connection failed: \(text, privacy: .public)")
+            return text
         }
     }
 
-    static func describe(_ error: Error) -> String {
+    static func describe(_ error: Error, config: RemoteConfig = .off) -> String {
         switch error {
         case VaultError.rollbackDetected(let local, let remote):
             return "The remote vault is older (generation \(remote)) than what this Mac last synced (\(local)). Refusing to roll back."
@@ -148,7 +216,14 @@ final class SyncCoordinator: ObservableObject {
         case VaultError.authenticationFailed, VaultError.corruptItemData:
             return "A remote item failed verification and was not applied."
         case SyncError.unauthorized:
-            return "GitHub rejected the token. Check it has Contents read/write on the repository."
+            switch config {
+            case .github: return "GitHub rejected the token. Check it has Contents read/write on the repository."
+            case .webdav: return "The server rejected the username or password."
+            case .s3: return "The storage service rejected the access key or secret."
+            default: return "The remote rejected the credentials."
+            }
+        case SyncError.missingToken:
+            return "No password or key is saved for this remote. Enter it in Settings → Sync."
         case let e as LocalizedError:
             return e.errorDescription ?? "\(error)"
         default:
