@@ -252,6 +252,9 @@ final class VaultStoreTests: XCTestCase {
         let base = try store.itemData(o.id)!
         try store.save(overview: o, details: ItemDetails(fields: ["password": "left"]))
         let left = try store.itemData(o.id)!
+        // The merge stamps its result with the current time; without a gap that time can equal the
+        // save above to the millisecond and the winner then depends on a hash tie-break.
+        Thread.sleep(forTimeInterval: 0.02)
         // Build a "remote" edit from the same base with a later timestamp.
         let keys = VaultKeys(vaultKey: try store.withVaultKey { $0 })
         var o2 = try ItemFile.decodeOverview(base, keys: keys).overview

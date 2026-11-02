@@ -22,6 +22,10 @@ public struct KDFParams: Codable, Equatable, Sendable {
         self.salt = salt
     }
 
+    /// Upper bounds accepted from a header: 1 GiB and 20 passes (the defaults are 256 MiB, 3).
+    static let maxMemoryKiB: UInt32 = 1_048_576
+    static let maxIterations: UInt32 = 20
+
     public static func fresh() -> KDFParams {
         KDFParams(salt: Sodium.randomData(saltBytes))
     }
@@ -31,7 +35,11 @@ enum KDF {
     /// Derives a 32-byte key-encryption key from a password.
     static func deriveKEK(password: SecureBytes, params: KDFParams) throws -> SecureBytes {
         Sodium.ensureReady()
-        guard params.salt.count == KDFParams.saltBytes, params.parallelism == 1 else {
+        // The parameters come from a file that a hostile remote can serve (the first download of a
+        // vault has nothing to authenticate it yet): bound the work so it cannot exhaust memory or time.
+        guard params.salt.count == KDFParams.saltBytes, params.parallelism == 1,
+              params.iterations >= 1, params.iterations <= KDFParams.maxIterations,
+              params.memoryKiB >= 8, params.memoryKiB <= KDFParams.maxMemoryKiB else {
             throw VaultError.corruptHeader
         }
         let out = SecureBytes(count: AEAD.keyBytes)

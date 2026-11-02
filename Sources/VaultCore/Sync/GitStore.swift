@@ -18,7 +18,11 @@ public struct GitConfig: Codable, Equatable, Sendable {
 
     /// Rejects values that git would read as options or as exotic transports.
     public var isValid: Bool {
-        !url.isEmpty && !url.hasPrefix("-") && !url.contains("::") && url.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil
+        // A password or token inside an http(s) address would be written to the clone's .git/config
+        // and to the log: use a credential helper or an SSH key instead.
+        if let parsed = URL(string: url), ["http", "https"].contains(parsed.scheme?.lowercased() ?? ""),
+           parsed.user != nil || parsed.password != nil { return false }
+        return !url.isEmpty && !url.hasPrefix("-") && !url.contains("::") && url.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil
             && !branch.hasPrefix("-") && !branch.contains("..") && branch.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil
             && !prefix.hasPrefix("-") && !prefix.contains("..")
     }
@@ -64,10 +68,8 @@ public final class GitStore: BatchingRemoteStore, @unchecked Sendable {
             guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return [:] }
             var out: [String: String] = [:]
             for name in names where !name.hasPrefix(".") {
-                var isDir: ObjCBool = false
                 let url = folder.appendingPathComponent(name)
-                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue,
-                      let data = try? Data(contentsOf: url) else { continue }
+                guard SafeFile.isRegular(url), let data = try? SafeFile.readRegular(url) else { continue }
                 out[prefix + name] = GitBlob.sha(data)
             }
             return out
@@ -134,9 +136,8 @@ public final class GitStore: BatchingRemoteStore, @unchecked Sendable {
     private func file(_ path: String) -> URL { dir.appendingPathComponent(config.prefix + path) }
 
     private func readFile(_ path: String) throws -> RemoteObject? {
-        let url = file(path)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        let data = try Data(contentsOf: url)
+        // A hostile repository can contain symlinks, devices or huge files under any name.
+        guard let data = try SafeFile.readRegular(file(path)) else { return nil }
         return RemoteObject(data: data, etag: GitBlob.sha(data))
     }
 
@@ -237,7 +238,10 @@ public final class GitStore: BatchingRemoteStore, @unchecked Sendable {
         let exe = try await Self.locateGit()
         let base = ["-c", "core.hooksPath=/dev/null", "-c", "user.name=Satchel", "-c", "user.email=satchel@localhost",
                     "-c", "commit.gpgsign=false", "-c", "protocol.ext.allow=never", "-c", "core.autocrlf=false",
-                    "-c", "gc.auto=0", "-c", "advice.detachedHead=false"]
+                    "-c", "gc.auto=0", "-c", "advice.detachedHead=false",
+                    // Symlinks in the repository become plain files: a hostile repo cannot point a path at
+                    // a directory or file outside the clone.
+                    "-c", "core.symlinks=false"]
         var env = [
             "GIT_TERMINAL_PROMPT": "0",
             "GIT_ALLOW_PROTOCOL": allowedProtocols,

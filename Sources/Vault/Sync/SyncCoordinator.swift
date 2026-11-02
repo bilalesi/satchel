@@ -96,8 +96,12 @@ final class SyncCoordinator: ObservableObject {
     // MARK: Changing settings
 
     /// Saves a new remote (and its credential) for this vault and syncs.
-    func apply(_ newConfig: RemoteConfig, secret: String?) throws {
+    /// `resetState` forgets what was agreed with the previous remote (generation, etags): a different
+    /// remote has its own history, and keeping the old numbers would read as a rollback. It is off
+    /// right after "Connect an existing vault", which has just recorded the state of the new remote.
+    func apply(_ newConfig: RemoteConfig, secret: String?, resetState: Bool = true) throws {
         guard let store = session?.store, store.isUnlocked else { throw VaultError.locked }
+        if resetState, newConfig != config { try store.saveSyncState(SyncState()) }
         if let name = newConfig.secretName, let secret, !secret.isEmpty { try store.setLocalSecret(name, secret) }
         try newConfig.persist(to: store)
         config = newConfig
@@ -251,6 +255,8 @@ final class SyncCoordinator: ObservableObject {
 
     static func describe(_ error: Error, config: RemoteConfig = .off) -> String {
         switch error {
+        case VaultError.rollbackDetected(let local, 0):
+            return "This remote has no vault, but this Mac synced one to it before (generation \(local)). It may have been wiped or restored. Nothing was uploaded. To start over on purpose, set Sync to Off, save, then set it up again."
         case VaultError.rollbackDetected(let local, let remote):
             return "The remote vault is older (generation \(remote)) than what this Mac last synced (\(local)). Refusing to roll back."
         case VaultError.corruptManifest:

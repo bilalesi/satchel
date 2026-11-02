@@ -1,6 +1,21 @@
 import Foundation
 import os
 
+/// The session the HTTP backends use by default: no disk cache (a stale cached manifest would be
+/// served without asking the server), no cookies, and a ceiling on total time per request.
+public enum SyncNetwork {
+    public static let session: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.urlCache = nil
+        c.httpCookieStorage = nil
+        c.httpShouldSetCookies = false
+        c.requestCachePolicy = .reloadIgnoringLocalCacheData
+        c.timeoutIntervalForRequest = 30
+        c.timeoutIntervalForResource = 180
+        return URLSession(configuration: c)
+    }()
+}
+
 /// Thin URLSession wrapper shared by the HTTP backends: maps transport errors to
 /// `SyncError.network`, never follows redirects (a redirect could carry credentials to another
 /// host), and logs method, path and status only. No headers and no bodies reach the log.
@@ -13,11 +28,22 @@ struct HTTPClient: Sendable {
         self.log = Logger(subsystem: AppIdentity.bundleID, category: category)
     }
 
+    /// A response body larger than this is refused: vault objects are kilobytes, and a hostile
+    /// server could otherwise stream until memory runs out.
+    static let maxBodyBytes = 64 * 1024 * 1024
+
     func send(_ req: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let what = "\(req.httpMethod ?? "?") \(req.url?.path ?? "?")"
         do {
-            let (data, resp) = try await session.data(for: req, delegate: NoRedirects.shared)
+            let (stream, resp) = try await session.bytes(for: req, delegate: NoRedirects.shared)
             guard let http = resp as? HTTPURLResponse else { throw SyncError.network("not an HTTP response") }
+            guard resp.expectedContentLength <= Int64(Self.maxBodyBytes) else { throw SyncError.remote(status: http.statusCode, message: "response too large") }
+            var data = Data()
+            if resp.expectedContentLength > 0 { data.reserveCapacity(Int(resp.expectedContentLength)) }
+            for try await byte in stream {
+                data.append(byte)
+                if data.count > Self.maxBodyBytes { throw SyncError.remote(status: http.statusCode, message: "response too large") }
+            }
             if http.statusCode >= 400 { log.error("\(what, privacy: .public) → \(http.statusCode)") }
             else { log.info("\(what, privacy: .public) → \(http.statusCode)") }
             return (data, http)

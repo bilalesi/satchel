@@ -39,4 +39,16 @@ final class FolderStoreTests: XCTestCase {
                        "0A0B0C0D-0000-0000-0000-000000000000")
         XCTAssertNil(RemotePaths.itemID(fromPath: "items/junk.txt"))
     }
+
+    func testSpecialFilesAreNotReadAndNotListed() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("folder-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("items"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("items/a.vitem"), withDestinationURL: URL(fileURLWithPath: "/dev/zero"))
+        try Data("ok".utf8).write(to: dir.appendingPathComponent("items/b.vitem"))
+        let store = FolderStore(root: dir)
+        do { _ = try await store.get("items/a.vitem"); XCTFail("a link to a device must not be read") } catch {}
+        let list = try await store.list(prefix: "items/")
+        XCTAssertEqual(Set(list.keys), ["items/b.vitem"])
+    }
 }

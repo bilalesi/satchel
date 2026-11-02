@@ -97,7 +97,7 @@ UNIVERSAL=1 VERSION=0.1.0 scripts/make-dmg.sh   # build/Satchel-0.1.0.dmg
 `.github/workflows/release.yml` tests, builds a universal DMG and publishes it as release `v0.1.<commit count>` on every push to `main` that changes the app. In-app updates need releases to be signed:
 
 1. Create a key pair once: `swift scripts/update-key.swift generate`. Put the **public** key in `Resources/update-public-key.txt` and commit it. Keep the private key in a password manager.
-2. Store the private key as the repository secret `UPDATE_SIGNING_KEY` (`gh secret set UPDATE_SIGNING_KEY`).
+2. Store the private key as the secret `UPDATE_SIGNING_KEY` of a GitHub environment named `release` (`gh secret set UPDATE_SIGNING_KEY --env release`), and in the repository settings limit that environment to the `main` branch so no other branch's workflow can read it.
 3. If the repository is not `bilalesi/satchel`, set `SatchelUpdateRepository` in `Resources/Info.plist`.
 
 Without the secret the release is published unsigned and installed apps ignore it. Losing the private key means existing installs can no longer update automatically; they need a manual install of a build with a new public key.

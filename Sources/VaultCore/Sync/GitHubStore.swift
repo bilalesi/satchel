@@ -31,7 +31,7 @@ public final class GitHubStore: RemoteStore {
 
     public var displayName: String { "GitHub " + repo.fullName }
 
-    public init(repo: GitHubRepo, token: String, session: URLSession = .shared) {
+    public init(repo: GitHubRepo, token: String, session: URLSession = SyncNetwork.session) {
         self.repo = repo
         self.token = token
         self.session = session

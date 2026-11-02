@@ -114,4 +114,36 @@ final class GitStoreTests: XCTestCase {
         if case .network = GitStore.map("ssh: Could not resolve hostname nope") {} else { XCTFail() }
         if case .remote(_, let m) = GitStore.map("git@h: Permission denied (publickey).") { XCTAssertTrue(m.contains("SSH key")) } else { XCTFail() }
     }
+
+    func testSymlinksInAHostileRepositoryAreNotFollowed() async throws {
+        // Another "device" pushes a repository whose item path is a symlink to a local file.
+        let git = try await GitStore.locateGit()
+        let work = tmp.appendingPathComponent("hostile")
+        func run(_ args: [String]) async throws {
+            let r = try await GitStore.run(git, ["-c", "user.name=t", "-c", "user.email=t@t"] + args, cwd: work, env: [:])
+            XCTAssertEqual(r.status, 0, r.stderr)
+        }
+        try FileManager.default.createDirectory(at: work.appendingPathComponent("items"), withIntermediateDirectories: true)
+        let secretFile = tmp.appendingPathComponent("outside-secret.txt")
+        try Data("do not read me".utf8).write(to: secretFile)
+        try FileManager.default.createSymbolicLink(at: work.appendingPathComponent("items/00000000-0000-0000-0000-000000000001.vitem"),
+                                                   withDestinationURL: secretFile)
+        try await run(["init", "-q", "-b", "main"])
+        try await run(["add", "-A"])
+        try await run(["commit", "-q", "-m", "hostile"])
+        try await run(["push", "-q", "file://" + bare.path, "HEAD:refs/heads/main"])
+
+        let victim = try makeStore("victim")
+        let got = try await victim.get("items/00000000-0000-0000-0000-000000000001.vitem")
+        XCTAssertNotEqual(got?.data, Data("do not read me".utf8), "the link must not be followed to the file outside the clone")
+        XCTAssertLessThan(got?.data.count ?? 0, 200, "it is checked out as a tiny plain file holding the link text")
+    }
+
+    func testGitAddressesWithCredentialsAreRejected() {
+        XCTAssertFalse(GitConfig(url: "https://user:token@example.com/r.git").isValid)
+        XCTAssertFalse(GitConfig(url: "https://ghp_token@github.com/me/r.git").isValid)
+        XCTAssertTrue(GitConfig(url: "https://github.com/me/r.git").isValid)
+        XCTAssertTrue(GitConfig(url: "git@github.com:me/r.git").isValid)
+        XCTAssertTrue(GitConfig(url: "ssh://git@host.example/r.git").isValid)
+    }
 }

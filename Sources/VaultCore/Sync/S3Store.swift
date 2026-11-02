@@ -32,7 +32,7 @@ public final class S3Store: RemoteStore {
 
     public var displayName: String { "S3 \(config.bucket)" }
 
-    public init(config: S3Config, secretKey: String, session: URLSession = .shared, now: @escaping @Sendable () -> Date = { Date() }) throws {
+    public init(config: S3Config, secretKey: String, session: URLSession = SyncNetwork.session, now: @escaping @Sendable () -> Date = { Date() }) throws {
         guard let url = URL(string: config.endpoint), !config.bucket.isEmpty, !config.accessKeyID.isEmpty, !secretKey.isEmpty else {
             throw SyncError.notConfigured
         }

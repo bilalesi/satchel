@@ -16,14 +16,8 @@ public final class FolderStore: RemoteStore {
     }
 
     public func get(_ path: String) async throws -> RemoteObject? {
-        do {
-            let data = try Data(contentsOf: url(path))
-            return RemoteObject(data: data, etag: GitBlob.sha(data))
-        } catch let e as NSError where e.domain == NSCocoaErrorDomain && e.code == NSFileReadNoSuchFileError {
-            return nil
-        } catch {
-            throw SyncError.network(error.localizedDescription)
-        }
+        guard let data = try SafeFile.readRegular(url(path)) else { return nil }
+        return RemoteObject(data: data, etag: GitBlob.sha(data))
     }
 
     public func put(_ path: String, data: Data, ifMatch: String?) async throws -> String {
@@ -53,7 +47,8 @@ public final class FolderStore: RemoteStore {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return [:] }
         var out: [String: String] = [:]
         for name in names where !name.hasPrefix(".") {
-            if let data = try? Data(contentsOf: dir.appendingPathComponent(name)) {
+            let file = dir.appendingPathComponent(name)
+            if SafeFile.isRegular(file), let data = try? SafeFile.readRegular(file) {
                 out[prefix + name] = GitBlob.sha(data)
             }
         }

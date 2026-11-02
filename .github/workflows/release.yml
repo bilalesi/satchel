@@ -21,6 +21,9 @@ concurrency:
 jobs:
   release:
     runs-on: macos-26
+    # The signing key belongs to this environment (restrict it to `main` in the repository settings),
+    # so a workflow edited on another branch cannot read it.
+    environment: release
     timeout-minutes: 40
     permissions:
       contents: write # create the release and upload the DMG; nothing else

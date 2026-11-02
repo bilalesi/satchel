@@ -188,4 +188,93 @@ final class SyncSelectionTests: XCTestCase {
         let back = try JSONDecoder().decode(SyncSelection.self, from: JSONEncoder().encode(s))
         XCTAssertEqual(back, s)
     }
+
+    // MARK: Review fixes
+
+    func testWipedRemoteManifestIsARollbackNotAFreshStart() async throws {
+        let a = try makeA()
+        try save(a, item("one"))
+        try await SyncEngine(store: a, remote: remote).sync()
+        let itemPath = remote.paths.first { $0.hasPrefix("items/") }!
+        let before = remote[itemPath]
+        remote[RemotePaths.manifest] = nil
+        do { try await SyncEngine(store: a, remote: remote).sync(); XCTFail("expected a rollback error") }
+        catch { XCTAssertEqual(error as? VaultError, .rollbackDetected(local: a.manifest.generation, remote: 0)) }
+        XCTAssertEqual(remote[itemPath], before, "nothing may be uploaded over the remote")
+    }
+
+    func testFailedRoundKeepsEtagRecordsSoNextRoundDoesNotFakeAConflict() async throws {
+        let store = OpaqueEtagStore(remote)
+        let a = try makeA()
+        let x = item("x")
+        try save(a, x)
+        try await SyncEngine(store: a, remote: store).sync()
+        let b = try await SyncEngine.bootstrap(remote: store, into: root.appendingPathComponent("B"), password: pw, deviceID: UUID())
+        var edited = x.0; edited.title = "x edited"
+        try a.save(overview: edited, details: ItemDetails(fields: ["password": "new"]))
+        try await SyncEngine(store: a, remote: store).sync()
+
+        remote.failPutsAfter = remote.puts.count // B pulls the new x, then its manifest write fails
+        do { try await SyncEngine(store: b, remote: store).sync(); XCTFail() } catch { XCTAssertEqual(error as? SyncError, .network("injected")) }
+        remote.failPutsAfter = nil
+        let r = try await SyncEngine(store: b, remote: store).sync()
+        XCTAssertEqual(r.conflicts, 0, "identical bytes must not be merged as a change on both sides")
+        XCTAssertEqual(try b.loadOverviews().items.first { $0.id == x.0.id }?.tags.contains("conflict"), false)
+        XCTAssertEqual(try b.details(for: x.0.id).fields["password"], "new")
+    }
+
+    func testLocallyRolledBackFileIsPulledOverNotPushed() async throws {
+        let a = try makeA()
+        let x = item("x")
+        try save(a, x)
+        let v1 = try a.itemData(x.0.id)!
+        try a.save(overview: x.0, details: ItemDetails(fields: ["password": "v2"]))
+        try await SyncEngine(store: a, remote: remote).sync()
+        let remoteBytes = remote[RemotePaths.item(x.0.id)]
+        try v1.write(to: a.itemsURL.appendingPathComponent("\(x.0.id.uuidString).\(ItemFile.fileExtension)"))
+        let r = try await SyncEngine(store: a, remote: remote).sync()
+        XCTAssertEqual(r.pulled, 1)
+        XCTAssertEqual(remote[RemotePaths.item(x.0.id)], remoteBytes, "the stale bytes must not reach the remote")
+        XCTAssertEqual(try a.details(for: x.0.id).fields["password"], "v2")
+    }
+
+    func testJunkLocalFileNeverBlocksSyncAndIsNeverUploaded() async throws {
+        let a = try makeA()
+        let x = item("x")
+        try save(a, x)
+        try await SyncEngine(store: a, remote: remote).sync()
+        let junkID = UUID()
+        let junkURL = a.itemsURL.appendingPathComponent("\(junkID.uuidString).\(ItemFile.fileExtension)")
+        try Data("not an item".utf8).write(to: junkURL)
+        // Junk over an item the remote has: replaced by the remote copy.
+        try Data("garbage".utf8).write(to: a.itemsURL.appendingPathComponent("\(x.0.id.uuidString).\(ItemFile.fileExtension)"))
+        let r = try await SyncEngine(store: a, remote: remote).sync()
+        XCTAssertEqual(r.pulled, 1)
+        XCTAssertEqual(try a.details(for: x.0.id).fields["password"], "x")
+        XCTAssertNil(remote[RemotePaths.item(junkID)])
+        XCTAssertFalse(a.manifest.versions.keys.contains(junkID.uuidString))
+    }
+
+    func testPullDoesNotOverwriteAnEditMadeDuringTheRound() throws {
+        let a = try makeA()
+        let x = item("x")
+        try save(a, x)
+        let decided = try a.itemData(x.0.id)
+        try a.save(overview: x.0, details: ItemDetails(fields: ["password": "typed meanwhile"]))
+        let incoming = try a.itemData(x.0.id)!
+        XCTAssertThrowsError(try a.writeRawItem(incoming, ifCurrentIs: decided)) { XCTAssertTrue(($0 as? SyncError).map { if case .conflict = $0 { return true } else { return false } } ?? false) }
+        XCTAssertNoThrow(try a.writeRawItem(incoming, ifCurrentIs: incoming))
+        let absent = try a.itemData(UUID())
+        XCTAssertNil(absent)
+    }
+
+    func testHeaderKDFParametersAreBounded() {
+        let salt = Data(repeating: 1, count: KDFParams.saltBytes)
+        for bad in [KDFParams(memoryKiB: 4_000_000, iterations: 1, salt: salt),
+                    KDFParams(memoryKiB: 8192, iterations: 1_000_000, salt: salt),
+                    KDFParams(memoryKiB: 8192, iterations: 0, salt: salt)] {
+            XCTAssertThrowsError(try KDF.deriveKEK(password: SecureBytes(utf8: "pw"), params: bad)) { XCTAssertEqual($0 as? VaultError, .corruptHeader) }
+        }
+        XCTAssertNoThrow(try KDF.deriveKEK(password: SecureBytes(utf8: "pw"), params: KDFParams(memoryKiB: 8192, iterations: 1, salt: salt)))
+    }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import os
 import VaultCore
@@ -32,6 +33,8 @@ final class UpdateManager: NSObject, ObservableObject {
     private var session: URLSession!
     private var downloadContinuation: CheckedContinuation<URL, Error>?
     private var downloadingOffer: UpdateOffer?
+    /// SHA-256 of the DMG at the moment its signature was verified; checked again right before install.
+    private var verifiedDigest: String?
 
     // MARK: Configuration
 
@@ -145,16 +148,17 @@ final class UpdateManager: NSObject, ObservableObject {
             let sigData = try await fetchData(offer.signatureURL, maxBytes: 4096)
             let signature = String(decoding: sigData, as: UTF8.self)
             let key = publicKey
-            let verified = try await Task.detached(priority: .userInitiated) { () -> Bool in
+            let digest = try await Task.detached(priority: .userInitiated) { () -> String? in
                 let data = try Data(contentsOf: file, options: .mappedIfSafe)
-                guard data.count == offer.size else { return false }
-                return UpdateSignature.verify(data, signature: signature, publicKey: key)
+                guard data.count == offer.size, UpdateSignature.verify(data, signature: signature, publicKey: key) else { return nil }
+                return Self.sha256(data)
             }.value
-            guard verified else {
+            guard let digest else {
                 try? FileManager.default.removeItem(at: file)
                 throw UpdateError.badSignature
             }
             let kept = try Self.keep(file, as: "Satchel-\(offer.version).dmg")
+            verifiedDigest = digest
             state = .ready(offer, kept)
         } catch {
             Self.log.error("update download failed: \(error.localizedDescription, privacy: .public)")
@@ -178,6 +182,10 @@ final class UpdateManager: NSObject, ObservableObject {
         let (data, resp) = try await session.data(from: url)
         guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count <= maxBytes else { throw UpdateError.badSignature }
         return data
+    }
+
+    private nonisolated static func sha256(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private static func keep(_ temp: URL, as name: String) throws -> URL {
@@ -206,8 +214,13 @@ final class UpdateManager: NSObject, ObservableObject {
         }
         do {
             let pid = ProcessInfo.processInfo.processIdentifier
-            let staged = try await Task.detached(priority: .userInitiated) {
-                try Installer.stage(dmg: dmg, nextTo: appURL, expectedVersion: offer.version.description)
+            guard let expected = verifiedDigest else { throw UpdateError.badSignature }
+            let staged = try await Task.detached(priority: .userInitiated) { () -> URL in
+                // The file sat in a user-writable cache between verification and now: check it is
+                // still exactly what was verified before mounting it.
+                let data = try Data(contentsOf: dmg, options: .mappedIfSafe)
+                guard Self.sha256(data) == expected else { throw UpdateError.badSignature }
+                return try Installer.stage(dmg: dmg, nextTo: appURL, expectedVersion: offer.version.description)
             }.value
             try Installer.launchSwap(pid: pid, old: appURL, new: staged)
             NSApp.terminate(nil)
@@ -330,7 +343,11 @@ enum Installer {
         #!/bin/sh
         PID="$1"; OLD="$2"; NEW="$3"
         i=0
-        while kill -0 "$PID" 2>/dev/null; do sleep 0.2; i=$((i+1)); [ $i -gt 150 ] && break; done
+        while kill -0 "$PID" 2>/dev/null; do
+          sleep 0.2; i=$((i+1))
+          # The old app did not quit: leave everything as it was.
+          if [ $i -gt 150 ]; then rm -rf "$NEW"; rm -f "$0"; exit 1; fi
+        done
         BACKUP="$OLD.previous-$$"
         if mv "$OLD" "$BACKUP"; then
           if mv "$NEW" "$OLD"; then

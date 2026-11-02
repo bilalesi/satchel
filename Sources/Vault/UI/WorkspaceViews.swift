@@ -20,6 +20,7 @@ struct WorkspaceSwitcher: View {
             return items
         }
         .help("Switch workspace")
+        .disabled(session.busy)
         .sheet(isPresented: $creating) { NewWorkspaceSheet() }
     }
 }

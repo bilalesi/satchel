@@ -394,6 +394,19 @@ public final class VaultStore: @unchecked Sendable {
         try AtomicFile.write(data, to: itemURL(header.id))
     }
 
+    /// Like `writeRawItem(_:)`, but only if the item file is still byte-for-byte what the caller
+    /// decided on (`nil` = no file). The sync engine reads a file, then spends network time before
+    /// writing; a save by the user in between must not be overwritten. Throws `SyncError.conflict`,
+    /// which makes the engine start the round again from the new local state.
+    public func writeRawItem(_ data: Data, ifCurrentIs expected: Data?) throws {
+        mutex.lock(); defer { mutex.unlock() }
+        let header = try verifyRemoteItem(data)
+        let url = itemURL(header.id)
+        let current = FileManager.default.fileExists(atPath: url.path) ? try AtomicFile.read(url) : nil
+        guard current == expected else { throw SyncError.conflict(url.lastPathComponent) }
+        try AtomicFile.write(data, to: url)
+    }
+
     /// Same item changed on two devices. Newer `updatedAt` wins; the loser's secret fields
     /// go into history (deduplicated, capped); the winner is tagged `conflict`.
     /// Deterministic given the same inputs, so both devices converge.

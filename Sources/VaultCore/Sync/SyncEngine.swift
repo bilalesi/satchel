@@ -16,6 +16,15 @@ private final class Tally: @unchecked Sendable {
     func bump(_ change: (inout SyncReport) -> Void) { lock.withLock { change(&value) } }
 }
 
+/// Sync state shared by the rounds of one `sync()` call. A round that fails after pulling an item
+/// has already written the file; without its etag record the next round would treat identical
+/// bytes as a change on both sides and fabricate a merge (opaque etags cannot prove equality).
+private final class StateBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: SyncState?
+    var state: SyncState? { get { lock.withLock { stored } } set { lock.withLock { stored = newValue } } }
+}
+
 /// The §7.3 algorithm. Optimistic concurrency: every remote write carries the etag it
 /// expects; a mismatch restarts the round (max 3). Items first, manifest last, so a
 /// crash between the two is repaired by the next round.
@@ -40,14 +49,21 @@ public final class SyncEngine: Sendable {
     public func sync() async throws -> SyncReport {
         guard store.isUnlocked else { throw VaultError.locked }
         let tally = Tally() // accumulates over rounds: a retry only moves what is still missing
+        let box = StateBox()
         var last: Error = SyncError.conflict(RemotePaths.manifest)
-        for _ in 0..<Self.maxRounds {
-            do { return try await run(tally) } catch let e as SyncError {
-                guard case .conflict = e else { throw e }
-                last = e
+        do {
+            for _ in 0..<Self.maxRounds {
+                do { return try await run(tally, box) } catch let e as SyncError {
+                    guard case .conflict = e else { throw e }
+                    last = e
+                }
             }
+            throw last
+        } catch {
+            // Keep the etag records of what this call already moved (see StateBox).
+            if let state = box.state { try? store.saveSyncState(state) }
+            throw error
         }
-        throw last
     }
 
     private struct Outcome: Sendable {
@@ -56,12 +72,12 @@ public final class SyncEngine: Sendable {
         var state: SyncState
     }
 
-    private func run(_ tally: Tally) async throws -> SyncReport {
+    private func run(_ tally: Tally, _ box: StateBox) async throws -> SyncReport {
         let outcome: Outcome
         if let batching = remote as? BatchingRemoteStore {
-            outcome = try await batching.withBatch { try await self.round(tally) }
+            outcome = try await batching.withBatch { try await self.round(tally, box) }
         } else {
-            outcome = try await round(tally)
+            outcome = try await round(tally, box)
         }
         try store.replaceManifest(outcome.manifest)
         try store.saveSyncState(outcome.state)
@@ -70,9 +86,10 @@ public final class SyncEngine: Sendable {
 
     // MARK: One round
 
-    private func round(_ tally: Tally) async throws -> Outcome {
+    private func round(_ tally: Tally, _ box: StateBox) async throws -> Outcome {
         let prior = tally.snapshot
-        var state = try store.loadSyncState()
+        var state = try box.state ?? store.loadSyncState()
+        defer { box.state = state }
         if state.filterFingerprint != filter.fingerprint {
             state.skipped = [:] // the selection changed: look at skipped items again
             state.filterFingerprint = filter.fingerprint
@@ -80,6 +97,10 @@ public final class SyncEngine: Sendable {
         let localManifest = store.manifest
 
         guard let remoteManifestObj = try await remote.get(RemotePaths.manifest) else {
+            // A remote that synced before and now has no manifest was wiped, rolled back or is hiding
+            // it. Re-uploading from here would overwrite newer objects, so stop instead. Starting over
+            // on purpose means switching sync off and on (that resets this state).
+            if state.lastGeneration > 0 { throw VaultError.rollbackDetected(local: state.lastGeneration, remote: 0) }
             return try await initialPush(tally: tally, state: state)
         }
         let remoteManifest = try store.decodeRemoteManifest(remoteManifestObj.data)
@@ -107,13 +128,19 @@ public final class SyncEngine: Sendable {
         for id in ids.sorted(by: { $0.uuidString < $1.uuidString }) {
             let key = id.uuidString
             let path = RemotePaths.item(id)
-            let localData = try store.itemData(id)
-            // Trust the file over the manifest: a crash may have left a newer file.
-            let lv = max(localManifest.version(of: id) ?? 0, localData.flatMap { try? ItemFile.decodeHeader($0).version } ?? 0)
+            let rawLocal = try store.itemData(id)
+            // A local file that cannot be read as an item is junk (a hostile remote can plant one
+            // through the first download). It never blocks a sync: the remote copy replaces it,
+            // or it is ignored when there is none.
+            let local = rawLocal.flatMap { raw in (try? store.overview(of: raw)).map { (data: raw, header: $0.header, overview: $0.overview) } }
+            // The file is the truth for the local version: a crash may have left a newer file than
+            // the manifest says, and a file older than the manifest is a rollback that must be
+            // pulled over, never pushed.
+            let lv = local?.header.version ?? 0
             let rv = remoteManifest.version(of: id) ?? 0
             let remoteEtag = remoteList[path]
 
-            guard let localData else {
+            guard let localData = local?.data else {
                 // Nothing local. If the remote has it, selective sync decides whether to store it.
                 if rv > 0 {
                     if state.skipped[key] == rv { merged[key] = rv; continue }
@@ -123,19 +150,19 @@ public final class SyncEngine: Sendable {
                         merged[key] = rv
                         continue
                     }
-                    try store.writeRawItem(obj.data)
+                    try store.writeRawItem(obj.data, ifCurrentIs: rawLocal)
                     state.record(path: path, etag: obj.etag, data: obj.data)
                     tally.bump { $0.pulled += 1 }
                     merged[key] = rv
-                } else {
-                    merged[key] = max(lv, rv) // listed in a manifest but present nowhere: keep the version
                 }
+                // else: neither side has a readable copy. Never advertise it in the remote manifest:
+                // every other device would fail with "missing" on it.
                 continue
             }
 
             // Local copy exists. Excluded items stay on this Mac, except the deletion of
             // something already on the remote, which always propagates.
-            let (localHeaderInfo, localOverview) = try store.overview(of: localData)
+            let localHeaderInfo = local!.header, localOverview = local!.overview
             if !(localHeaderInfo.deleted && rv > 0) && !filter.includes(localOverview) {
                 localOnly[key] = lv
                 if rv > 0 { merged[key] = rv }
@@ -150,7 +177,7 @@ public final class SyncEngine: Sendable {
                 // Changed on both sides: merge, keep every value, push the result.
                 let remoteObj = try await fetchItem(id, path: path, expectedVersion: rv)
                 let mergedData = try store.mergeConflict(local: localData, remote: remoteObj.data)
-                try store.writeRawItem(mergedData)
+                try store.writeRawItem(mergedData, ifCurrentIs: localData)
                 let etag = try await remote.put(path, data: mergedData, ifMatch: remoteEtag)
                 state.record(path: path, etag: etag, data: mergedData)
                 merged[key] = try ItemFile.decodeHeader(mergedData).version
@@ -161,7 +188,7 @@ public final class SyncEngine: Sendable {
                 // the remote is inconsistent (or withholding an update): never record a version we do not hold.
                 guard !sameBytes else { throw VaultError.corruptItemData }
                 let obj = try await fetchItem(id, path: path, expectedVersion: rv)
-                try store.writeRawItem(obj.data)
+                try store.writeRawItem(obj.data, ifCurrentIs: localData)
                 state.record(path: path, etag: obj.etag, data: obj.data)
                 tally.bump { $0.pulled += 1 }
                 merged[key] = rv
@@ -226,7 +253,7 @@ public final class SyncEngine: Sendable {
         for id in try store.itemIDsOnDisk() {
             guard let data = try store.itemData(id) else { continue }
             let path = RemotePaths.item(id)
-            let (header, overview) = try store.overview(of: data)
+            guard let (header, overview) = try? store.overview(of: data) else { continue } // junk: never uploaded
             if !filter.includes(overview) {
                 localOnly[id.uuidString] = header.version
                 continue

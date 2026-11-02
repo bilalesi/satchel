@@ -52,6 +52,8 @@ final class VaultSession: ObservableObject {
     func connectExisting(config: RemoteConfig, secret: String?, password: String) async -> Bool {
         var ok = false
         await run {
+            // Same safety gate as Settings → Sync: a server that ignores conditional writes is refused.
+            if config.needsConditionalWriteProbe { _ = try await self.sync.check(config, typedSecret: secret) }
             let remote = try config.makeStore(secret: secret)
             let pw = SecureBytes(utf8: password)
             let url = self.vaultURL
@@ -61,7 +63,7 @@ final class VaultSession: ObservableObject {
             self.store = s
             self.touchIDEnabled = false
             try self.finishUnlock()
-            try self.sync.apply(config, secret: secret)
+            try self.sync.apply(config, secret: secret, resetState: false)
             ok = true
         }
         return ok
@@ -86,7 +88,9 @@ final class VaultSession: ObservableObject {
     // MARK: Workspaces
 
     func switchWorkspace(_ id: UUID) {
-        guard id != activeWorkspaceID, let target = workspaces.first(where: { $0.id == id }) else { return }
+        // While an unlock, create or connect is awaiting, it holds the old vault: switching now would
+        // leave that vault unlocked in memory and mix its data into the other workspace.
+        guard !busy, id != activeWorkspaceID, let target = workspaces.first(where: { $0.id == id }) else { return }
         lock()
         sync.vaultLocked()
         store = nil
@@ -119,7 +123,7 @@ final class VaultSession: ObservableObject {
 
     /// Takes the workspace off this Mac; its folder goes to the Trash. A remote copy is untouched.
     func removeWorkspace(_ id: UUID) {
-        guard workspaces.count > 1, let ws = workspaces.first(where: { $0.id == id }) else { return }
+        guard !busy, workspaces.count > 1, let ws = workspaces.first(where: { $0.id == id }) else { return }
         if id == activeWorkspaceID, let other = workspaces.first(where: { $0.id != id }) { switchWorkspace(other.id) }
         workspaces.removeAll { $0.id == id }
         WorkspaceStore.save(workspaces, active: activeWorkspaceID)

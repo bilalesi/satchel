@@ -11,7 +11,7 @@ public final class WebDAVStore: RemoteStore {
 
     public var displayName: String { "WebDAV " + (baseURL.host ?? baseURL.absoluteString) }
 
-    public init(baseURL: URL, username: String, password: String, session: URLSession = .shared) throws {
+    public init(baseURL: URL, username: String, password: String, session: URLSession = SyncNetwork.session) throws {
         try HTTPClient.requireSecure(baseURL)
         self.baseURL = baseURL
         self.username = username
