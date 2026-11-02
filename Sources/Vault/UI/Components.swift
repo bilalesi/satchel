@@ -135,7 +135,7 @@ private struct CircleBody: View {
 
     private var fill: Color {
         switch kind {
-        case .danger: return Color.red.opacity(hovering ? 0.16 : 0)
+        case .danger: return Color.red.opacity(hovering ? 0.18 : 0.10)
         case .secondary: return Color.primary.opacity(hovering ? 0.10 : 0.06)
         default: return Color.primary.opacity(hovering ? 0.08 : 0)
         }
@@ -471,6 +471,26 @@ struct MenuButton: View {
             }
         }
         .buttonStyle(PillButtonStyle(kind: kind, compact: compact))
+        .background(AnchorReader(box: anchor))
+    }
+}
+
+/// Toolbar button that opens the custom menu. Uses the system toolbar style (macOS 26
+/// draws its own glass capsule), so no custom pill is nested inside the system one.
+struct ToolbarMenuButton: View {
+    let title: String
+    let icon: Codicon
+    let items: () -> [MenuItem]
+    @State private var anchor = AnchorBox()
+
+    var body: some View {
+        Button {
+            guard let view = anchor.view else { return }
+            MenuPanelController.shared.show(items: items(), anchor: view, minWidth: max(view.bounds.width, 200))
+        } label: {
+            Label { Text(title) } icon: { Image(nsImage: icon.image(size: 15)) }
+                .labelStyle(.titleAndIcon)
+        }
         .background(AnchorReader(box: anchor))
     }
 }

@@ -27,18 +27,23 @@ struct MainWindow: View {
                 }
                 .searchable(text: $query, placement: .sidebar, prompt: "Search")
                 .toolbar {
+                    // System toolbar styling: macOS draws one glass capsule per item.
                     ToolbarItem(placement: .primaryAction) {
-                        MenuButton(title: "New", icon: .add, kind: .primary, compact: true) {
+                        ToolbarMenuButton(title: "New", icon: .add) {
                             ItemType.allCases.map { t in
                                 MenuItem(title: t.displayName, icon: Theme.icon(t)) { creatingType = t }
                             }
                         }
+                        .buttonStyle(.borderedProminent)
                         .help("New item")
                     }
-                    ToolbarItem {
-                        PillButton("Lock", icon: .lock, kind: .secondary, compact: true) { session.lock() }
-                            .keyboardShortcut("l", modifiers: [.command, .shift])
-                            .help("Lock the vault (⇧⌘L)")
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { session.lock() } label: {
+                            Label { Text("Lock") } icon: { Image(nsImage: Codicon.lock.image(size: 15)) }
+                        }
+                        .labelStyle(.iconOnly)
+                        .keyboardShortcut("l", modifiers: [.command, .shift])
+                        .help("Lock the vault (⇧⌘L)")
                     }
                 }
                 .sheet(item: $creatingType) { t in

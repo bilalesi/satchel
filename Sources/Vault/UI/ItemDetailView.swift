@@ -18,17 +18,18 @@ struct ItemDetailView: View {
                 header
                 if let details {
                     Card(padding: 0) {
+                        let rows = fieldRows(details)
                         VStack(spacing: 0) {
-                            if let u = overview.username { fieldRow("Username", u, secret: false) }
-                            ForEach(overview.type.fieldKeys, id: \.self) { key in
-                                if let v = details.fields[key], !v.isEmpty {
-                                    if key == "totpSeed", let totp = TOTP(v) {
-                                        oneTimeCodeRow(totp)
-                                    }
-                                    fieldRow(Theme.label(key), v, secret: ItemType.secretFieldKeys.contains(key), key: key)
+                            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                                switch row {
+                                case let .field(label, value, secret, key): fieldRow(label, value, secret: secret, key: key)
+                                case let .code(totp): oneTimeCodeRow(totp)
                                 }
+                                if index < rows.count - 1 { Divider().padding(.leading, Theme.Space.l) }
                             }
                         }
+                        // Hover highlights stay inside the card's rounded corners.
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
                     }
                     if !overview.urls.isEmpty || !overview.bundleIDs.isEmpty { linksCard }
                     if !details.history.isEmpty { historyCard(details.history) }
@@ -83,18 +84,41 @@ struct ItemDetailView: View {
     }
 
 
-    private func fieldRow(_ label: String, _ value: String, secret: Bool, key: String = "") -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 3) {
+    private enum FieldRow {
+        case field(label: String, value: String, secret: Bool, key: String)
+        case code(TOTP)
+    }
+
+    private func fieldRows(_ details: ItemDetails) -> [FieldRow] {
+        var rows: [FieldRow] = []
+        if let u = overview.username { rows.append(.field(label: "Username", value: u, secret: false, key: "username")) }
+        for key in overview.type.fieldKeys {
+            guard let v = details.fields[key], !v.isEmpty else { continue }
+            if key == "totpSeed", let totp = TOTP(v) { rows.append(.code(totp)) }
+            rows.append(.field(label: Theme.label(key), value: v, secret: ItemType.secretFieldKeys.contains(key), key: key))
+        }
+        return rows
+    }
+
+    /// Fixed mask length: the dots never reveal how long a secret is.
+    private static let mask = String(repeating: "•", count: 12)
+
+    private func fieldRow(_ label: String, _ value: String, secret: Bool, key: String) -> some View {
+        let shown = !secret || revealed.contains(key)
+        let multiline = key == "notes" || key == "privateKey"
+        return HStack(alignment: multiline ? .top : .center, spacing: Theme.Space.m) {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 Text(label).font(Theme.caption).foregroundStyle(.secondary)
-                Text(secret && !revealed.contains(key) ? String(repeating: "•", count: min(value.count, 18)) : value)
-                    .font(secret ? Theme.body.monospaced() : Theme.body)
+                Text(shown ? value : Self.mask)
+                    .font(shown && secret ? Theme.body.monospaced() : Theme.body)
+                    .tracking(shown ? 0 : 1)
+                    .foregroundStyle(shown ? .primary : .secondary)
                     .textSelection(.enabled)
-                    .lineLimit(key == "notes" || key == "privateKey" ? nil : 2)
+                    .lineLimit(multiline ? nil : 2)
             }
-            Spacer()
-            // Fixed-size circles: the eye/eye-closed and copy/check swaps never move the row.
-            HStack(spacing: Theme.Space.xs) {
+            Spacer(minLength: Theme.Space.s)
+            // Fixed-size circles: eye/eye-closed and copy/check swaps never move the row.
+            HStack(spacing: 2) {
                 if secret {
                     IconButton(revealed.contains(key) ? .eyeClosed : .eye, help: revealed.contains(key) ? "Hide" : "Show") {
                         if revealed.contains(key) { revealed.remove(key) } else { revealed.insert(key) }
@@ -105,12 +129,18 @@ struct ItemDetailView: View {
                     copied = label
                     Task { try? await Task.sleep(for: .seconds(1.5)); if copied == label { copied = nil } }
                 }
+                .foregroundStyle(copied == label ? Color.green : Color.secondary)
             }
         }
-        .padding(.horizontal, Theme.Space.l).padding(.vertical, Theme.Space.m)
+        // Trailing inset is smaller because the 28pt circle pads its glyph by 7pt:
+        // the icon's edge then sits as far from the card edge as the text does on the left.
+        .padding(.leading, Theme.Space.l)
+        .padding(.trailing, Theme.Space.s)
+        .padding(.vertical, Theme.Space.m)
+        .frame(minHeight: 60)
         .hoverHighlight(radius: 0)
-        .overlay(alignment: .bottom) { Divider().padding(.leading, Theme.Space.l) }
     }
+
 
     /// Live one-time code with a countdown; copy puts the code (not the seed) on the clipboard.
     private func oneTimeCodeRow(_ totp: TOTP) -> some View {
@@ -141,38 +171,61 @@ struct ItemDetailView: View {
                     Task { try? await Task.sleep(for: .seconds(1.5)); if copied == "One-time code" { copied = nil } }
                 }
             }
-            .padding(.horizontal, Theme.Space.l).padding(.vertical, Theme.Space.m)
-        .hoverHighlight(radius: 0)
-            .overlay(alignment: .bottom) { Divider().padding(.leading, Theme.Space.l) }
+            .padding(.leading, Theme.Space.l)
+            .padding(.trailing, Theme.Space.s)
+            .padding(.vertical, Theme.Space.m)
+            .frame(minHeight: 60)
+            .hoverHighlight(radius: 0)
         }
     }
 
+    /// Card padding 8 + row padding 8 = text at 16pt, the same edge as the section label.
     private var linksCard: some View {
-        Card(padding: Theme.Space.l) {
-            VStack(alignment: .leading, spacing: Theme.Space.s) {
+        Card(padding: Theme.Space.s) {
+            VStack(alignment: .leading, spacing: 2) {
                 SectionLabel(text: "Where it is used")
+                    .padding(.horizontal, Theme.Space.s).padding(.top, Theme.Space.s).padding(.bottom, Theme.Space.xs)
                 ForEach(overview.urls, id: \.self) { u in
                     Link(destination: URL(string: u.contains("://") ? u : "https://" + u) ?? URL(fileURLWithPath: "/")) {
-                        Label { Text(u) } icon: { Icon(.globe, size: 13) }.font(Theme.body)
-                            .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .hoverHighlight()
+                        linkRow(Text(u)) { Icon(.globe, size: 14).foregroundStyle(.secondary).frame(width: 20, height: 20) }
                     }
                     .pointerStyle(.link)
                 }
                 ForEach(overview.bundleIDs, id: \.self) { b in
-                    Label { Text(appName(b)) } icon: { Icon(.extensions, size: 13) }.font(Theme.body)
-                        .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
+                    linkRow(Text(appName(b)).foregroundStyle(.primary)) {
+                        if let icon = appIcon(b) {
+                            Image(nsImage: icon).resizable().frame(width: 20, height: 20)
+                        } else {
+                            Icon(.extensions, size: 14).foregroundStyle(.secondary).frame(width: 20, height: 20)
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    private func linkRow<I: View>(_ title: Text, @ViewBuilder icon: () -> I) -> some View {
+        HStack(spacing: Theme.Space.s) {
+            icon()
+            title.font(Theme.body).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Theme.Space.s)
+        .frame(height: 32)
+        .contentShape(Rectangle())
+        .hoverHighlight()
+    }
+
+    private func appIcon(_ bundleID: String) -> NSImage? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map { NSWorkspace.shared.icon(forFile: $0.path) }
+    }
+
     private func historyCard(_ history: [SecretRevision]) -> some View {
-        Card(padding: Theme.Space.l) {
-            VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                SectionLabel(text: "History").padding(.bottom, Theme.Space.xs)
+        Card(padding: Theme.Space.s) {
+            VStack(alignment: .leading, spacing: 2) {
+                SectionLabel(text: "History")
+                    .padding(.horizontal, Theme.Space.s).padding(.top, Theme.Space.s).padding(.bottom, Theme.Space.xs)
                 ForEach(Array(history.enumerated()), id: \.offset) { _, rev in
                     HStack(spacing: Theme.Space.s) {
                         Text(Theme.label(rev.field)).font(Theme.body)
@@ -181,7 +234,8 @@ struct ItemDetailView: View {
                         Spacer()
                         PillButton("Copy", icon: .copy, kind: .ghost, compact: true) { session.copy(rev.value) }
                     }
-                    .padding(.vertical, Theme.Space.xs).padding(.horizontal, Theme.Space.s)
+                    .padding(.horizontal, Theme.Space.s)
+                    .frame(height: 32)
                     .hoverHighlight()
                 }
             }
@@ -211,7 +265,9 @@ struct ItemDetailView: View {
 
     private func appName(_ bundleID: String) -> String {
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-            return FileManager.default.displayName(atPath: url.path)
+            // displayName keeps ".app" when Finder shows extensions; the user wants the app's name.
+            let name = FileManager.default.displayName(atPath: url.path)
+            return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
         }
         return bundleID
     }
