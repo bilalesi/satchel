@@ -3,7 +3,8 @@ import json, subprocess, sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from cards import backdrop, font, W, H
 
-OUT = 'satchel-promo-v2.mp4'
+OUT = 'satchel-promo-v3.mp4'
+SLOW = 0.76   # tempo: clip speeds are multiplied by this (never below real time); camera and captions scale with them
 
 # ---------- image helpers ----------
 def text_png(text, size, weight, color, name, pad=24):
@@ -69,9 +70,15 @@ def lens(name, src, dest, t0, t1, m=36):
                 mask=f'layers/{name}_mask.png', frame=f'layers/{name}_shadow.png', ring=f'layers/{name}_ring.png')
 
 def clip(src, ss, to, speed, cam, overlays=(), top=True, transition=None):
-    cams = [dict(t=c[0], zoom=c[1], u=c[2], v=c[3], ease=(c[4] if len(c) > 4 else None)) for c in cam]
-    shot = dict(kind='clip', src=f'{src}.mov', ss=ss, speed=speed, cropTop=66 if top else 133,
-                dur=round((to - ss) / speed, 3), cam=cams, overlays=list(overlays))
+    sp = max(1.0, speed * SLOW) if speed > 1.0 else speed
+    old_dur, new_dur = (to - ss) / speed, (to - ss) / sp
+    f = new_dur / old_dur                      # everything timed inside the shot stretches by the same factor
+    cams = [dict(t=round(c[0] * f, 3), zoom=c[1], u=c[2], v=c[3], ease=(c[4] if len(c) > 4 else None)) for c in cam]
+    ovs = []
+    for o in overlays:
+        o = dict(o); o['t0'] = round(o['t0'] * f, 3); o['t1'] = round(o['t1'] * f, 3); ovs.append(o)
+    shot = dict(kind='clip', src=f'{src}.mov', ss=ss, speed=sp, cropTop=66 if top else 133,
+                dur=round(new_dur, 3), cam=cams, overlays=ovs)
     if transition: shot['transition'] = dict(kind=transition[0], dur=transition[1])
     return shot
 
@@ -88,7 +95,7 @@ t2, t2w, t2h = text_png("Your secrets. Your Mac. Nobody else's.", 54, 'Regular',
 title = card(bg, [
     dict(png=ic, x=(W - iw) / 2, y=170, t0=0.15, anim='spring', dur=0.8),
     dict(png=t1, x=(W - t1w) / 2, y=610, t0=0.55, anim='slideUp'),
-    dict(png=t2, x=(W - t2w) / 2, y=815, t0=0.95, anim='slideUp')], 2.7)
+    dict(png=t2, x=(W - t2w) / 2, y=815, t0=0.95, anim='slideUp')], 3.0)
 
 h1, h1w, h1h = text_png('Your browser fills it in.', 96, 'Bold', (250, 246, 240, 255), 'ext_head')
 h2, h2w, h2h = text_png('Logins from your own vault, nothing in the cloud.', 46, 'Regular', (201, 195, 188, 255), 'ext_sub')
@@ -102,7 +109,7 @@ for i, (f, label) in enumerate(browsers):
     p, w, h = icon_png(f'assets/{f}.png', size, f'br_{f}', label)
     ext_layers.append(dict(png=p, x=x0 + i * (w + gap), y=400, t0=0.5 + 0.14 * i, anim='spring', dur=0.7))
 ext_layers.append(dict(png=h3, x=(W - h3w) / 2, y=860, t0=1.35, anim='slideUp'))
-ext = card(bg, ext_layers, 2.9, ('zoom', 0.35))
+ext = card(bg, ext_layers, 3.3, ('zoom', 0.35))
 
 ic2, i2w, i2h = icon_png('assets/satchel.png', 300, 'icon_small')
 o1, o1w, o1h = text_png('Free. Open source. Yours.', 104, 'Bold', (250, 246, 240, 255), 'out_head')
@@ -112,7 +119,7 @@ outro = card(bg, [
     dict(png=ic2, x=(W - i2w) / 2, y=120, t0=0.1, anim='spring', dur=0.8),
     dict(png=o1, x=(W - o1w) / 2, y=540, t0=0.5, anim='slideUp'),
     dict(png=o2, x=(W - o2w) / 2, y=700, t0=0.85, anim='slideUp'),
-    dict(png=o3, x=(W - o3w) / 2, y=800, t0=1.15, anim='slideUp')], 3.5, ('dissolve', 0.5))
+    dict(png=o3, x=(W - o3w) / 2, y=800, t0=1.15, anim='slideUp')], 3.9, ('dissolve', 0.5))
 
 # ---------- the shots ----------
 shots = [
@@ -127,8 +134,8 @@ shots = [
     clip('syncB', 9.0, 15.0, 2.0, [(0, 1.75, .56, .34), (3.0, 1.95, .62, .43)], [cap('cap_sync2', .2, 2.9)], transition=('slideLeft', .3)),
     clip('syncB', 15.6, 24.6, 4.5, [(0, 1.7, .55, .40), (2.0, 1.6, .55, .46)], transition=('slideLeft', .3)),
     clip('syncB', 27.3, 31.3, 1.6, [(0, 1.4, .5, .3), (.6, 1.9, .5, .09, 'expo'), (1.8, 1.9, .5, .1), (2.5, 1.5, .62, .4)], [cap('cap_sync3', .3, 2.4)], transition=('dissolve', .25)),
-    clip('selectiveF', 3.0, 7.4, 2.0, [(0, 1.0, .5, .5), (2.2, 1.45, .22, .3, 'expo')],
-         [cap('cap_sel1', .3, 2.1), lens('lens_locks', [640, 214, 620, 180], [900, 470, 980], 1.0, 2.15)], transition=('whipLeft', .35)),
+    clip('selectiveF', 3.0, 7.4, 2.0, [(0, 1.0, .5, .5), (1.0, 2.1, .33, .22, 'expo'), (2.2, 2.1, .33, .24)],
+         [cap('cap_sel1', .3, 2.1)], transition=('whipLeft', .35)),
     clip('selectiveF', 7.6, 14.4, 2.0, [(0, 1.7, .74, .12), (3.4, 1.8, .72, .16)], [cap('cap_sel2', .3, 3.3)], transition=('slideLeft', .3)),
     clip('selectiveF', 14.8, 22.8, 2.5, [(0, 1.4, .45, .3), (1.6, 1.75, .72, .15), (3.2, 1.4, .3, .35)], [cap('cap_sel3', .3, 3.1)], transition=('slideLeft', .3)),
     clip('selectiveF', 27.3, 34.5, 3.0, [(0, 1.8, .5, .55), (2.4, 1.8, .5, .62)], [cap('cap_sel4', .2, 2.3)], transition=('zoom', .35)),
