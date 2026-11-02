@@ -51,7 +51,7 @@ struct WorkspaceRail: View {
             .pointerStyle(.link)
             .background(AnchorReader(box: addAnchor))
             .disabled(session.busy)
-            .tooltip("New workspace")
+            .sideTip("New workspace")
             .accessibilityLabel("New workspace")
             Spacer()
         }
@@ -91,7 +91,7 @@ private struct RailTile: View {
         .onHover { hovering = $0 }
         .background(AnchorReader(box: anchor))
         .disabled(session.busy)
-        .tooltip(workspace.name)
+        .sideTip(workspace.name)
         .accessibilityLabel(workspace.name)
         .accessibilityAddTraits(active ? .isSelected : [])
         .contextMenu {

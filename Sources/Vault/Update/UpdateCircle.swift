@@ -26,7 +26,7 @@ struct UpdateIconButton: View {
             .buttonStyle(.plain)
             .pointerStyle(model.enabled ? .link : nil)
             .disabled(!model.enabled)
-            .tooltip(model.help)
+            .railHint(model.help)
             .accessibilityLabel(model.help)
             .transition(.scale.combined(with: .opacity))
         }

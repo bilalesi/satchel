@@ -223,10 +223,17 @@ public final class VaultStore: @unchecked Sendable {
     /// Writes a new version of the item. Secret fields that changed are recorded in history.
     @discardableResult
     public func save(overview: ItemOverview, details: ItemDetails) throws -> ItemOverview {
+        try save(overview: overview, details: details, stampingNow: true)
+    }
+
+    /// `stampingNow: false` keeps the item's own `updatedAt`. Internal: only the demo seeder (tests) needs
+    /// items that look weeks old; every real save stamps the time.
+    @discardableResult
+    func save(overview: ItemOverview, details: ItemDetails, stampingNow: Bool) throws -> ItemOverview {
         mutex.lock(); defer { mutex.unlock() }
         let keys = try requireKeys()
         var next = overview
-        next.updatedAt = Date().millisecondPrecision
+        if stampingNow { next.updatedAt = Date().millisecondPrecision }
         let version = (manifest.version(of: overview.id) ?? 0) + 1
         var finalDetails = details
         if version > 1, let previous = try? self.details(for: overview.id) {

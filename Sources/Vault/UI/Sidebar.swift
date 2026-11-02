@@ -295,15 +295,16 @@ struct SidebarFooter: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             .background(AnchorReader(box: anchor))
-            .tooltip(syncHelp)
+            .railHint(syncHelp)
             .accessibilityLabel("\(AppIdentity.name) menu")
             if !vertical { Spacer() }
             UpdateIconButton()
             Button { openSettingsTab(nil) } label: { Icon(.settingsGear, size: 14) }
                 .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 28))
-                .tooltip("Settings")
+                .railHint("Settings")
                 .accessibilityLabel("Settings")
         }
+        .environment(\.sideTips, vertical)
         .padding(.horizontal, Theme.Space.m)
         .padding(.vertical, Theme.Space.s)
         .overlay(alignment: .top) { Divider().padding(.horizontal, Theme.Space.s) }
@@ -447,7 +448,7 @@ private struct RailItem: View {
         .onHover { hovering = $0; if $0 { pulse += 1 } }
         .onChange(of: selected) { _, now in if now { pulse += 1 } }
         .background(AnchorReader(box: anchor))
-        .tooltip(title)
+        .sideTip(title)
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
