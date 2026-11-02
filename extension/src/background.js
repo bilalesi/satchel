@@ -67,7 +67,14 @@ browserAPI.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case "generate":
         return call("generate");
       case "open":
-        return call("open");
+        return call("open", { target: msg.target });
+      // The rest are for the popup only (no sender.tab): a page's content script never gets them.
+      case "search":
+      case "copy":
+      case "code":
+      case "lock":
+        if (sender.tab) return { ok: false, error: "popup_only" };
+        return call(msg.type, { query: msg.query, limit: msg.limit, itemID: msg.itemID, field: msg.field });
       case "match": {
         // From a content script: its own top-frame URL. From the popup: the active tab.
         const url = sender.tab ? topFrameURL(sender) : (await activeTabURL()).url;

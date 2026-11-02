@@ -11,6 +11,12 @@ struct BridgeRequest: Decodable {
     var username: String?
     var password: String?
     var title: String?
+    var query: String?
+    /// For `copy`: "username", "password" or "totp".
+    var field: String?
+    /// For `open`: "settings:sync", or nothing for the main window.
+    var target: String?
+    var limit: Int?
 }
 
 struct BridgeItem: Encodable {
@@ -19,14 +25,40 @@ struct BridgeItem: Encodable {
     let username: String?
     let host: String?
     let type: String
+    let favorite: Bool
+    let category: String?
 
-    init(_ o: ItemOverview) {
+    init(_ o: ItemOverview, category: String? = nil) {
         id = o.id
         title = o.title
         username = o.username
         host = o.hosts.first
         type = o.type.rawValue
+        favorite = o.favorite
+        self.category = category
     }
+}
+
+/// What the popup shows about the vault besides the matches. Never contains a secret.
+struct BridgeInfo: Encodable {
+    var workspace: String
+    var workspaceIcon: String
+    var workspaceColor: String
+    /// Only while unlocked.
+    var items: Int?
+    var rotate: Int?
+    var rotateTitles: [String]?
+    var localOnly: Int?
+    var sync: BridgeSync
+}
+
+struct BridgeSync: Encodable {
+    /// "off", "idle", "syncing" or "error".
+    var state: String
+    var backend: String?
+    /// Seconds since 1970 of the last good sync.
+    var last: Double?
+    var error: String?
 }
 
 struct BridgeCredential: Encodable {
@@ -47,6 +79,10 @@ struct BridgeResponse: Encodable {
     var credential: BridgeCredential?
     var password: String?
     var version: String?
+    var info: BridgeInfo?
+    /// For `code`: the current one-time code and the seconds it stays valid.
+    var code: String?
+    var remaining: Int?
 
     static func failure(_ id: Int, _ error: String) -> BridgeResponse {
         BridgeResponse(id: id, ok: false, error: error)

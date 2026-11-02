@@ -17,10 +17,28 @@ def send(obj):
 def recv():
     n = struct.unpack("<I", p.stdout.read(4))[0]
     return json.loads(p.stdout.read(n))
-send({"id": 1, "type": "hello"}); r1 = recv(); print("hello →", r1)
-send({"id": 2, "type": "match", "url": "https://accounts.google.com/signin"}); r2 = recv(); print("match →", r2)
-p.stdin.close(); p.wait(timeout=5)
+def ask(i, **kw):
+    send({"id": i, **kw}); return recv()
+r1 = ask(1, type="hello"); print("hello →", r1)
 assert r1.get("ok") is True and r1.get("version") == "1", r1
+info = r1.get("info") or {}
+print("info →", info)
+assert info.get("workspace") and info.get("sync", {}).get("state"), info
+r2 = ask(2, type="match", url="https://accounts.google.com/signin"); print("match →", r2)
 assert r2.get("ok") is True, r2
-print("bridge OK (locked=%s)" % r1.get("locked"))
+if r1.get("locked"):
+    print("bridge OK (locked: unlock the app to exercise search/copy/code)")
+else:
+    assert info.get("items") is not None, "unlocked status must carry counts"
+    r3 = ask(3, type="search", query="a", limit=3); print("search →", r3)
+    assert r3.get("ok") and len(r3.get("items", [])) <= 3, r3
+    assert "password" not in json.dumps(r3).lower().replace('"password": null', ''), "search must not carry secrets"
+    r4 = ask(4, type="copy", itemID=(r3["items"] or [{"id": "00000000-0000-0000-0000-000000000000"}])[0]["id"], field="bogus"); print("copy bogus →", r4)
+    assert r4.get("ok") is False and r4.get("error") == "bad_field", r4
+    r5 = ask(5, type="code", itemID="00000000-0000-0000-0000-000000000000"); print("code unknown →", r5)
+    assert r5.get("ok") is False, r5
+    r6 = ask(6, type="lock"); print("lock →", r6)
+    assert r6.get("locked") is True and r6.get("info", {}).get("items") is None, r6
+    print("bridge OK (unlocked paths, then locked)")
+p.stdin.close(); p.wait(timeout=5)
 PY

@@ -2,31 +2,105 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <header>
-    <div class="brand"><span class="dot" id="dot"></span><strong>Satchel</strong></div>
-    <span id="status" class="muted">…</span>
-  </header>
-  <section id="locked" hidden>
-    <p class="muted">The vault is locked.</p>
-    <button id="unlock" class="primary">Unlock with Touch ID</button>
-  </section>
-  <section id="offline" hidden>
-    <p class="muted">Satchel is not running or the host is not installed.</p>
-    <p class="muted small">Open Satchel → Settings → Browsers → Install.</p>
-  </section>
-  <section id="matches" hidden>
-    <div id="list"></div>
-    <p id="none" class="muted" hidden>No login saved for this site.</p>
-  </section>
-  <footer>
-    <button id="save" title="Save the username and password typed on this page">Save login</button>
-    <button id="generate" title="Copy a new strong password">Generate</button>
-    <button id="open" title="Open Satchel">Open</button>
-  </footer>
-  <p id="note" class="muted small" hidden></p>
+  <main class="panel" id="panel">
+    <header class="head">
+      <div class="avatar" id="avatar" aria-hidden="true">S</div>
+      <div class="who">
+        <div class="name" id="ws">Satchel</div>
+        <div class="state" id="state"><span class="pip" id="pip"></span><span id="stateText">…</span></div>
+      </div>
+      <button class="pill" id="open" title="Open Satchel">Open Satchel</button>
+    </header>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <!-- locked -->
+    <section id="locked" class="block" hidden>
+      <div class="hero">
+        <div class="lock" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        </div>
+        <div class="hero-t">Your vault is locked</div>
+        <div class="hero-s">Unlock to fill logins, copy passwords and codes.</div>
+        <button class="primary" id="unlock">Unlock with Touch ID</button>
+      </div>
+    </section>
+
+    <!-- offline -->
+    <section id="offline" class="block" hidden>
+      <div class="hero">
+        <div class="lock off" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5"/><path d="M12 16h.01"/></svg>
+        </div>
+        <div class="hero-t">Satchel isn’t running</div>
+        <div class="hero-s">Open the app, then try again. First time here? Settings → Browsers → Install.</div>
+        <button class="primary" id="retry">Try again</button>
+      </div>
+    </section>
+
+    <!-- unlocked -->
+    <div id="unlocked" hidden>
+      <div class="search">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg>
+        <input id="q" type="search" placeholder="Search your vault" autocomplete="off" spellcheck="false">
+        <kbd id="kbd">/</kbd>
+      </div>
+
+      <section id="siteBlock" class="block">
+        <h2 id="siteTitle">This site</h2>
+        <div id="site" class="list"></div>
+        <div id="none" class="empty" hidden>No login saved for <b id="noneHost"></b>.</div>
+      </section>
+
+      <section id="resultsBlock" class="block" hidden>
+        <h2>Results</h2>
+        <div id="results" class="list"></div>
+        <div id="noResults" class="empty" hidden>Nothing matches.</div>
+      </section>
+
+      <section id="actions" class="block">
+        <h2>Quick actions</h2>
+        <div class="list">
+          <button class="item" id="save">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+            <span class="txt"><span class="t">Save this login</span><span class="s">Uses what you typed on the page</span></span>
+            <span class="chev"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></span>
+          </button>
+          <button class="item" id="generate">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg></span>
+            <span class="txt"><span class="t">Generate a password</span><span class="s">Copied by Satchel, cleared on a timer</span></span>
+            <span class="chev"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></span>
+          </button>
+        </div>
+      </section>
+
+      <section id="health" class="block" hidden>
+        <div class="list">
+          <button class="item" id="rotate">
+            <span class="ico warn"><svg viewBox="0 0 24 24"><path d="M12 4 3 20h18L12 4Z"/><path d="M12 10v4M12 17h.01"/></svg></span>
+            <span class="txt"><span class="t" id="rotateT">Passwords to rotate</span><span class="s" id="rotateS"></span></span>
+            <span class="chev"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></span>
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <footer class="foot" id="foot">
+      <button class="item sync" id="sync">
+        <span class="ico" id="syncIco"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.3M4 12a8 8 0 0 1 13.7-5.6L20 8.7"/><path d="M4 20v-4.7h4.7M20 4v4.7h-4.7"/></svg></span>
+        <span class="txt"><span class="t" id="syncT">Sync</span><span class="s" id="syncS"></span></span>
+        <span class="chev"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></span>
+      </button>
+      <div class="foot-row">
+        <span class="muted" id="count"></span>
+        <button class="link" id="lock" hidden>Lock now</button>
+      </div>
+    </footer>
+  </main>
   <script src="popup.js"></script>
 </body>
 </html>

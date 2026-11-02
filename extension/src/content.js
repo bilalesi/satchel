@@ -62,6 +62,19 @@
   function closeDropdown() {
     if (dropdown) { dropdown.remove(); dropdown = null; }
     activeField = null;
+    navigated = false;
+  }
+
+  const TILES = ["#3378f5", "#f58f24", "#33ad61", "#9461e6", "#1f9fad", "#e64d4d", "#eb66a3", "#858a99"];
+  const tileFor = (t) => TILES[[...t].reduce((a, c) => a + c.charCodeAt(0), 0) % TILES.length];
+  let rows = [];
+  let selIndex = 0;
+  let navigated = false;
+
+  function select(i) {
+    if (!rows.length) return;
+    selIndex = (i + rows.length) % rows.length;
+    rows.forEach((r, n) => r.el.classList.toggle("sel", n === selIndex));
   }
 
   function showDropdown(field, items, locked) {
@@ -73,24 +86,41 @@
     const r = field.getBoundingClientRect();
     const style = document.createElement("style");
     style.textContent = `
-      .box { position: fixed; z-index: 2147483647; left: ${Math.round(r.left)}px; top: ${Math.round(r.bottom + 4)}px;
-             min-width: ${Math.max(260, Math.round(r.width))}px; max-width: 360px; background: #fff; color: #111;
-             border: 1px solid rgba(0,0,0,.1); border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.14);
-             font: 13px -apple-system, system-ui, sans-serif; overflow: hidden; }
-      @media (prefers-color-scheme: dark) { .box { background: #1e1e20; color: #eee; border-color: rgba(255,255,255,.1); } }
-      .row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; }
-      .row:hover, .row.sel { background: rgba(32,120,245,.12); }
-      .tile { width: 24px; height: 24px; border-radius: 7px; background: #3378f5; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 12px; flex: none; }
-      .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .s { opacity: .6; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .foot { padding: 6px 12px; font-size: 11px; opacity: .55; border-top: 1px solid rgba(0,0,0,.06); display: flex; justify-content: space-between; }
-      .btn { padding: 10px 12px; cursor: pointer; font-weight: 600; color: #3378f5; }
+      :host { all: initial; }
+      .box { position: fixed; z-index: 2147483647; left: ${Math.round(r.left)}px; top: ${Math.round(r.bottom + 6)}px;
+             min-width: ${Math.max(280, Math.round(r.width))}px; max-width: 380px; padding: 6px;
+             background: #fff; color: #15171a; border: 1px solid rgba(20,24,30,.08); border-radius: 14px;
+             box-shadow: 0 12px 32px rgba(20,24,30,.18), 0 2px 6px rgba(20,24,30,.08);
+             font: 13px/1.35 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      @media (prefers-color-scheme: dark) { .box { background: #232427; color: #f1f2f4; border-color: rgba(255,255,255,.1); box-shadow: 0 12px 32px rgba(0,0,0,.5); } }
+      .head { padding: 4px 8px 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8a9099; }
+      .row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; cursor: pointer; }
+      .row:hover, .row.sel { background: rgba(20,24,30,.06); }
+      @media (prefers-color-scheme: dark) { .row:hover, .row.sel { background: rgba(255,255,255,.08); } }
+      .tile { width: 30px; height: 30px; border-radius: 9px; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
+      .txt { min-width: 0; flex: 1; }
+      .t { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .s { color: #5d636b; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      @media (prefers-color-scheme: dark) { .s { color: #a4a9b1; } }
+      .fill { flex: none; font-size: 11px; font-weight: 600; color: #3378f5; opacity: 0; }
+      .row:hover .fill, .row.sel .fill { opacity: 1; }
+      .foot { display: flex; justify-content: space-between; padding: 6px 8px 2px; margin-top: 4px; border-top: 1px solid rgba(20,24,30,.07); font-size: 11px; color: #8a9099; }
+      @media (prefers-color-scheme: dark) { .foot { border-color: rgba(255,255,255,.08); } }
+      kbd { font: 10.5px ui-monospace, Menlo, monospace; padding: 0 4px; border: 1px solid rgba(128,128,128,.35); border-radius: 4px; }
+      .lock { padding: 10px 8px; cursor: pointer; border-radius: 10px; font-weight: 600; color: #3378f5; }
+      .lock:hover { background: rgba(51,120,245,.1); }
     `;
     const box = document.createElement("div");
     box.className = "box";
+    const head = document.createElement("div");
+    head.className = "head";
+    head.textContent = "Satchel";
+    box.appendChild(head);
+    rows = [];
+    selIndex = 0;
     if (locked) {
       const b = document.createElement("div");
-      b.className = "btn";
+      b.className = "lock";
       b.textContent = "Unlock Satchel to fill…";
       b.addEventListener("mousedown", (e) => { e.preventDefault(); browserAPI.runtime.sendMessage({ type: "unlock" }).then(() => refresh(field)); });
       box.appendChild(b);
@@ -98,15 +128,31 @@
       items.forEach((it, i) => {
         const row = document.createElement("div");
         row.className = "row" + (i === 0 ? " sel" : "");
-        row.innerHTML = `<div class="tile">${(it.title || "?").slice(0, 1).toUpperCase()}</div><div><div class="t"></div><div class="s"></div></div>`;
-        row.querySelector(".t").textContent = it.title;
-        row.querySelector(".s").textContent = [it.username, it.host].filter(Boolean).join(" · ");
+        const tile = document.createElement("div");
+        tile.className = "tile";
+        tile.textContent = (it.title || "?").trim().slice(0, 1).toUpperCase();
+        tile.style.background = tileFor(it.title || "?");
+        const txt = document.createElement("div");
+        txt.className = "txt";
+        const t = document.createElement("div");
+        t.className = "t";
+        t.textContent = it.title;
+        const s = document.createElement("div");
+        s.className = "s";
+        s.textContent = [it.username, it.host].filter(Boolean).join(" · ");
+        txt.append(t, s);
+        const fill = document.createElement("span");
+        fill.className = "fill";
+        fill.textContent = "Fill";
+        row.append(tile, txt, fill);
         row.addEventListener("mousedown", (e) => { e.preventDefault(); pick(it.id, field); });
+        row.addEventListener("mousemove", () => select(i));
         box.appendChild(row);
+        rows.push({ el: row, id: it.id });
       });
       const foot = document.createElement("div");
       foot.className = "foot";
-      foot.innerHTML = "<span>Satchel</span><span>⌘⇧L fills the first</span>";
+      foot.innerHTML = "<span><kbd>↑</kbd> <kbd>↓</kbd> <kbd>↵</kbd></span><span><kbd>Esc</kbd> closes</span>";
       box.appendChild(foot);
     }
     root.appendChild(style);
@@ -143,14 +189,19 @@
     if (isLoginField(e.target)) refresh(e.target);
   }, true);
   document.addEventListener("focusout", () => { setTimeout(closeDropdown, 150); }, true);
+  // Arrow keys walk the list while it is open. Enter picks only after an arrow key (or Alt+Enter),
+  // so typing a username and pressing Enter to submit the form still works.
   document.addEventListener("keydown", (e) => {
     if (!e.isTrusted || !dropdown) return;
     if (e.key === "Escape") { closeDropdown(); return; }
-    if (e.key === "Enter" && e.altKey) {
+    if (!rows.length) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      const first = dropdown.shadowRoot ? null : null; // shadow root is closed; re-query via message
-      browserAPI.runtime.sendMessage({ type: "match" }).then((r) => { if (r && r.ok && r.items && r.items[0]) pick(r.items[0].id, activeField); });
-      void first;
+      navigated = true;
+      select(selIndex + (e.key === "ArrowDown" ? 1 : -1));
+    } else if (e.key === "Enter" && (navigated || e.altKey)) {
+      e.preventDefault();
+      pick(rows[selIndex].id, activeField);
     }
   }, true);
   window.addEventListener("scroll", closeDropdown, true);
