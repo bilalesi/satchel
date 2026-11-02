@@ -10,7 +10,7 @@ struct LookTile: View {
         RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
             .fill(CategoryStyle.color(named: colorName).gradient)
             .frame(width: size, height: size)
-            .overlay(Icon(CategoryStyle.icon(named: iconName), size: (size * 0.52).rounded()).foregroundStyle(.white))
+            .overlay(StaticGlyph(iconName: iconName, size: glyphSize(inTile: size, iconName: iconName)).foregroundStyle(.white))
     }
 }
 
@@ -20,6 +20,7 @@ struct StylePicker: View {
     @Binding var colorName: String
 
     private let columns = Array(repeating: GridItem(.fixed(28), spacing: 6), count: 8)
+    private let names = CategoryStyle.allIconNames
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -37,10 +38,10 @@ struct StylePicker: View {
                 }
             }
             LazyVGrid(columns: columns, spacing: 6) {
-                ForEach(CategoryStyle.icons, id: \.self) { icon in
-                    let selected = iconName == "\(icon)"
-                    Button { iconName = "\(icon)" } label: {
-                        Icon(icon, size: 14)
+                ForEach(names, id: \.self) { name in
+                    let selected = iconName == name
+                    Button { iconName = name } label: {
+                        StaticGlyph(iconName: name, size: SatchelGlyph(name: name) != nil ? 19 : 14)
                             .frame(width: 28, height: 26)
                             .foregroundStyle(selected ? Color.accentColor : Color.primary)
                             .background(selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05),
@@ -48,9 +49,23 @@ struct StylePicker: View {
                     }
                     .buttonStyle(.plain)
                     .pointerStyle(.link)
-                    .accessibilityLabel("\(icon)")
+                    .accessibilityLabel(name)
                 }
             }
+        }
+    }
+}
+
+/// A glyph at rest: a drawn one or a stock one, by name.
+struct StaticGlyph: View {
+    let iconName: String
+    let size: CGFloat
+
+    var body: some View {
+        if let glyph = SatchelGlyph(name: iconName) {
+            SatchelGlyphView(glyph: glyph, size: size)
+        } else {
+            Icon(CategoryStyle.icon(named: iconName), size: size)
         }
     }
 }

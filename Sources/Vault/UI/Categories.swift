@@ -21,6 +21,9 @@ enum CategoryStyle {
         .dashboard, .inbox, .starFull, .history, .account, .link, .note,
     ]
 
+    /// Every icon the picker offers: Satchel's drawn ones first, then the stock set.
+    static var allIconNames: [String] { SatchelGlyph.allCases.map(\.name) + icons.map { "\($0)" } }
+
     static let palette: [(name: String, color: Color)] = [
         ("blue", Color(red: 0.20, green: 0.47, blue: 0.96)),
         ("orange", Color(red: 0.96, green: 0.56, blue: 0.14)),

@@ -50,16 +50,16 @@ enum MenuEntry: String, CaseIterable, Identifiable {
     /// Icon (a `Codicon` case name) and colour (a `CategoryStyle.palette` name) it has until the user changes them.
     var defaultLook: MenuLook {
         switch self {
-        case .home: return MenuLook(icon: "dashboard", color: "grey")
-        case .all: return MenuLook(icon: "inbox", color: "blue")
-        case .favorites: return MenuLook(icon: "starFull", color: "orange")
-        case .recent: return MenuLook(icon: "history", color: "green")
-        case .login: return MenuLook(icon: "account", color: "blue")
-        case .apiKey: return MenuLook(icon: "key", color: "orange")
-        case .dbCredential: return MenuLook(icon: "database", color: "green")
-        case .webhook: return MenuLook(icon: "link", color: "purple")
-        case .secureNote: return MenuLook(icon: "note", color: "grey")
-        case .sshKey: return MenuLook(icon: "terminal", color: "teal")
+        case .home: return MenuLook(icon: "satchel.overview", color: "grey")
+        case .all: return MenuLook(icon: "satchel.allItems", color: "blue")
+        case .favorites: return MenuLook(icon: "satchel.favorites", color: "orange")
+        case .recent: return MenuLook(icon: "satchel.recent", color: "green")
+        case .login: return MenuLook(icon: "satchel.login", color: "blue")
+        case .apiKey: return MenuLook(icon: "satchel.apiKey", color: "orange")
+        case .dbCredential: return MenuLook(icon: "satchel.database", color: "green")
+        case .webhook: return MenuLook(icon: "satchel.webhook", color: "purple")
+        case .secureNote: return MenuLook(icon: "satchel.note", color: "grey")
+        case .sshKey: return MenuLook(icon: "satchel.sshKey", color: "teal")
         }
     }
 }
@@ -110,7 +110,7 @@ final class MenuLookStore: ObservableObject {
 /// The tile of a built-in entry, in whatever look the user chose.
 struct EntryTile: View {
     let entry: MenuEntry
-    var size: CGFloat = 18
+    var size: CGFloat = 22
     @ObservedObject private var looks = MenuLookStore.shared
 
     var body: some View {
@@ -130,7 +130,7 @@ struct MenuLookCard: View {
         VStack(alignment: .leading, spacing: Theme.Space.l) {
             HStack(spacing: Theme.Space.m) {
                 // The preview replays the icon's motion each time the icon changes.
-                MotionTile(iconName: look.icon, colorName: look.color, size: 36)
+                MotionTile(iconName: look.icon, colorName: look.color, size: 44)
                     .environment(\.iconPulse, looks.revision)
                 Text(entry.title).font(Theme.headline)
                 Spacer()

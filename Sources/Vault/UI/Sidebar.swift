@@ -164,7 +164,7 @@ private struct MenuRow<Leading: View>: View {
                 if let count { Text("\(count)").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit() }
             }
             .padding(.horizontal, Theme.Space.s)
-            .frame(height: 30)
+            .frame(height: 34)
             .background(selected ? Color.primary.opacity(0.10) : (hovering ? Color.primary.opacity(0.05) : .clear),
                         in: RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous))
             .contentShape(Rectangle())
@@ -210,7 +210,7 @@ private struct CategoryRow: View {
         MenuRow(selection: $selection, target: .category(category.id), title: category.name, count: count,
                 trailing: sync.isConfigured && !synced
                     ? AnyView(Icon(.lock, size: 10).foregroundStyle(.tertiary).help("Stays on this Mac")) : nil) {
-            MotionTile(iconName: category.iconName, colorName: category.colorName)
+            MotionTile(iconName: category.iconName, colorName: category.colorName, size: 22)
         }
         .background(AnchorReader(box: anchor))
         .contextMenu {
@@ -253,7 +253,7 @@ private struct CategoryDraftRow: View {
                 MenuPanelController.shared.showContent(anchor: view, placement: .trailing, onDismiss: { focused = true }) { _ in
                     StylePickerCard(iconName: $draft.iconName, colorName: $draft.colorName)
                 }
-            } label: { LookTile(iconName: draft.iconName, colorName: draft.colorName, size: 18) }
+            } label: { LookTile(iconName: draft.iconName, colorName: draft.colorName, size: 22) }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
                 .tooltip("Choose icon and colour")
@@ -435,10 +435,9 @@ private struct RailItem: View {
         let selected = selection == target
         let look = entry.map { looks.look($0) } ?? MenuLook(icon: iconName, color: colorName)
         Button { selection = target } label: {
-            MotionGlyph(iconName: look.icon, size: 15)
+            MotionTile(iconName: look.icon, colorName: look.color, size: 28)
                 .environment(\.iconPulse, pulse)
-                .foregroundStyle(CategoryStyle.color(named: look.color))
-                .frame(width: 36, height: 34)
+                .frame(width: 40, height: 38)
                 .background(selected ? Color.primary.opacity(0.10) : (hovering ? Color.primary.opacity(0.05) : .clear),
                             in: RoundedRectangle(cornerRadius: Theme.rowRadius + 2, style: .continuous))
                 .contentShape(Rectangle())
