@@ -38,7 +38,7 @@ public final class SyncEngine: Sendable {
     // MARK: One round
 
     private func round(_ report: inout SyncReport) async throws {
-        let state = store.syncState
+        let state = try store.loadSyncState()
         let localManifest = store.manifest
 
         guard let remoteManifestObj = try await remote.get(RemotePaths.manifest) else {
@@ -79,7 +79,7 @@ public final class SyncEngine: Sendable {
 
             let bothChanged = lv > base && rv > base && !sameBytes
             if bothChanged, let localData {
-                let remoteData = try await fetchItem(id, path: path)
+                let remoteData = try await fetchItem(id, path: path, expectedVersion: rv)
                 let mergedData = try store.mergeConflict(local: localData, remote: remoteData)
                 try store.writeRawItem(mergedData)
                 _ = try await remote.put(path, data: mergedData, ifMatch: remoteEtag)
@@ -87,8 +87,13 @@ public final class SyncEngine: Sendable {
                 report.conflicts += 1
                 report.pushed += 1
             } else if rv > lv || (localData == nil && remoteEtag != nil) {
-                if !sameBytes {
-                    let remoteData = try await fetchItem(id, path: path)
+                if sameBytes {
+                    // The remote manifest promises a newer version but serves our older bytes:
+                    // the remote is inconsistent (or withholding an update). Never record a
+                    // version we do not hold.
+                    guard rv <= lv else { throw VaultError.corruptItemData }
+                } else {
+                    let remoteData = try await fetchItem(id, path: path, expectedVersion: rv)
                     try store.writeRawItem(remoteData)
                     report.pulled += 1
                 }
@@ -159,9 +164,9 @@ public final class SyncEngine: Sendable {
         report.generation = manifest.generation
     }
 
-    private func fetchItem(_ id: UUID, path: String) async throws -> Data {
+    private func fetchItem(_ id: UUID, path: String, expectedVersion: UInt64) async throws -> Data {
         guard let obj = try await remote.get(path) else { throw SyncError.notFound(path) }
-        let header = try store.verifyRemoteItem(obj.data)
+        let header = try store.verifyRemoteItem(obj.data, expectedVersion: expectedVersion)
         guard header.id == id else { throw VaultError.corruptItemData }
         return obj.data
     }

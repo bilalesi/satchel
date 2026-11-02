@@ -155,14 +155,19 @@ final class VaultStoreTests: XCTestCase {
             XCTAssertEqual($0 as? VaultError, .corruptManifest)
         }
         try FileManager.default.removeItem(at: dir)
-        _ = try makeStore()
+        let store = try makeStore()
         let headerURL = dir.appendingPathComponent(VaultHeader.fileName)
         var h = try Data(contentsOf: headerURL)
         h.append(contentsOf: [0x20]) // still valid JSON, different bytes
         try h.write(to: headerURL)
-        XCTAssertThrowsError(try VaultStore.open(at: dir, deviceID: device).unlock(password: pw)) {
+        // The key path cannot vouch for the header: refused.
+        XCTAssertThrowsError(try VaultStore.open(at: dir, deviceID: device).unlock(vaultKey: try store.withVaultKey { $0 })) {
             XCTAssertEqual($0 as? VaultError, .corruptManifest)
         }
+        // The password path proves the header's slot is genuine and heals the manifest.
+        let healed = try VaultStore.open(at: dir, deviceID: device)
+        try healed.unlock(password: pw)
+        XCTAssertEqual(healed.manifest.headerHash, ManifestFile.sha256(h))
     }
 
     func testAtomicWriteLeavesNoTempFileAndRestrictsPermissions() throws {
@@ -279,14 +284,59 @@ final class VaultStoreTests: XCTestCase {
 
     func testSyncStateRoundTrip() throws {
         let store = try makeStore()
-        XCTAssertEqual(store.syncState, SyncState())
+        XCTAssertEqual(try store.loadSyncState(), SyncState())
         var s = SyncState()
         s.lastGeneration = 7
         s.synced = [UUID().uuidString: 3]
         s.lastSyncAt = Date().millisecondPrecision
         try store.saveSyncState(s)
-        XCTAssertEqual(store.syncState, s)
+        XCTAssertEqual(try store.loadSyncState(), s)
         XCTAssertEqual(s.baseVersion(of: UUID()), 0)
+        // A present but unreadable file must not silently reset the generation.
+        try Data("{broken".utf8).write(to: dir.appendingPathComponent(SyncState.fileName))
+        XCTAssertThrowsError(try store.loadSyncState())
+    }
+
+    func testMergeConflictKeepsNonSecretFieldsAndTombstoneEdits() throws {
+        let store = try makeStore()
+        let o = ItemOverview(type: .secureNote, title: "Note")
+        try store.save(overview: o, details: ItemDetails(fields: ["notes": "base"]))
+        let base = try store.itemData(o.id)!
+        try store.save(overview: o, details: ItemDetails(fields: ["notes": "local edit"]))
+        let local = try store.itemData(o.id)!
+        let keys = VaultKeys(vaultKey: try store.withVaultKey { $0 })
+        var o2 = try ItemFile.decodeOverview(base, keys: keys).overview
+        o2.updatedAt = Date().addingTimeInterval(5).millisecondPrecision
+        let remote = try ItemFile.encode(overview: o2, details: ItemDetails(fields: ["notes": "remote edit"]), version: 2, deleted: false, keys: keys)
+        let merged = try ItemFile.decodeDetails(try store.mergeConflict(local: local, remote: remote), keys: keys)
+        XCTAssertEqual(merged.fields["notes"], "remote edit")
+        XCTAssertEqual(merged.history.map(\.value), ["local edit"])
+
+        // Tombstone wins over an edit: the edit survives in the tombstone's history.
+        var o3 = o2
+        o3.updatedAt = Date().addingTimeInterval(10).millisecondPrecision
+        let tomb = try ItemFile.encode(overview: o3, details: nil, version: 3, deleted: true, keys: keys)
+        let mergedTomb = try store.mergeConflict(local: local, remote: tomb)
+        XCTAssertTrue(try ItemFile.decodeHeader(mergedTomb).deleted)
+        XCTAssertEqual(try ItemFile.decodeDetails(mergedTomb, keys: keys).history.map(\.value), ["local edit"])
+    }
+
+    func testUnlockHealsManifestWhenPasswordProvesHeader() throws {
+        let store = try makeStore()
+        try store.save(overview: login("X", pass: "x").0, details: login("X", pass: "x").1)
+        // Simulate a crash between the header write and the manifest write of a password change.
+        var h = store.header
+        h.updatedAt = Date().addingTimeInterval(1).millisecondPrecision
+        try h.encoded().write(to: dir.appendingPathComponent(VaultHeader.fileName))
+        // Touch ID path (header not proven) must still refuse.
+        let viaKey = try VaultStore.open(at: dir, deviceID: device)
+        XCTAssertThrowsError(try viaKey.unlock(vaultKey: try store.withVaultKey { $0 })) { XCTAssertEqual($0 as? VaultError, .corruptManifest) }
+        // Password path proves the header and repairs the manifest.
+        let viaPassword = try VaultStore.open(at: dir, deviceID: device)
+        try viaPassword.unlock(password: pw)
+        XCTAssertEqual(try viaPassword.loadOverviews().items.count, 1)
+        let again = try VaultStore.open(at: dir, deviceID: device)
+        try again.unlock(vaultKey: try store.withVaultKey { $0 }) // healed: key path works now
     }
 
     func testLocalSecretRoundTrip() throws {

@@ -115,6 +115,16 @@ final class GitHubStoreTests: XCTestCase {
         XCTAssertEqual(StubURLProtocol.requests[0].url?.absoluteString, "https://api.github.com/repos/me/secrets/contents/vault/items?ref=main")
     }
 
+    func testTruncatedListingIsAnError() async {
+        let entries = (0..<1000).map { #"{"name":"\#($0).vitem","sha":"s","type":"file"}"# }.joined(separator: ",")
+        StubURLProtocol.handler = { _ in (200, self.json("[" + entries + "]")) }
+        do { _ = try await store.list(prefix: "items/"); XCTFail() } catch {
+            guard case .remote(let status, let message)? = error as? SyncError else { return XCTFail("\(error)") }
+            XCTAssertEqual(status, 200)
+            XCTAssertTrue(message.contains("truncated"))
+        }
+    }
+
     func testVerifyReturnsFullName() async throws {
         StubURLProtocol.handler = { _ in (200, self.json(#"{"full_name":"me/secrets","private":true}"#)) }
         let name = try await store.verify()

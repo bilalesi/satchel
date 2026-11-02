@@ -93,6 +93,11 @@ public final class GitHubStore: RemoteStore {
         guard let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             throw SyncError.remote(status: status, message: "\(dir) is not a directory")
         }
+        // The Contents API silently caps a directory listing at 1,000 entries; a partial list
+        // would make the engine treat existing items as new and loop on conflicts.
+        guard arr.count < 1000 else {
+            throw SyncError.remote(status: status, message: "\(dir) has 1,000 or more files; the GitHub contents listing is truncated. Split items into a prefix per vault or move to the Git trees API.")
+        }
         var out: [String: String] = [:]
         for entry in arr {
             guard entry["type"] as? String == "file", let name = entry["name"] as? String,

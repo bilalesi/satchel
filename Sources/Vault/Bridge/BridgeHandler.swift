@@ -64,9 +64,9 @@ final class BridgeHandler {
             r.items = [BridgeItem(overview)]
             return r
         case "generate":
-            var r = status(req.id)
-            r.password = PasswordGenerator.generate()
-            return r
+            // Copied by the app (concealed type + auto-clear); the password never reaches the extension.
+            session.copy(PasswordGenerator.generate())
+            return status(req.id)
         case "open":
             AppDelegate.openMainWindow()
             return status(req.id)

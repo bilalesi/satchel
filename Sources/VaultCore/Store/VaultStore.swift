@@ -86,23 +86,37 @@ public final class VaultStore: @unchecked Sendable {
 
     public func unlock(password: SecureBytes) throws {
         guard let slot = header.slots.first(where: { $0.isPassword }) else { throw VaultError.corruptHeader }
-        try unlock(vaultKey: try slot.unwrap(password: password))
+        // The header's own slot just unwrapped the vault key, so the header is proven genuine.
+        try unlock(vaultKey: try slot.unwrap(password: password), headerProven: true)
     }
 
     public func unlock(vaultKey vk: SecureBytes) throws {
+        try unlock(vaultKey: vk, headerProven: false)
+    }
+
+    private func unlock(vaultKey vk: SecureBytes, headerProven: Bool) throws {
         mutex.lock(); defer { mutex.unlock() }
         guard vk.count == VaultKey.byteCount else { throw VaultError.authenticationFailed }
         let candidate = VaultKeys(vaultKey: vk)
         // Verify the manifest before accepting the key: a wrong key fails here, and a
         // tampered manifest or header is rejected before any item is read.
         let manifestData = try AtomicFile.read(manifestURL)
-        let decoded = try ManifestFile.decode(manifestData, key: candidate.manifest)
-        guard decoded.headerHash == ManifestFile.sha256(try AtomicFile.read(headerURL)) else {
-            throw VaultError.corruptManifest
+        var decoded = try ManifestFile.decode(manifestData, key: candidate.manifest)
+        let headerBytes = try AtomicFile.read(headerURL)
+        let headerHash = ManifestFile.sha256(headerBytes)
+        var repairManifest = false
+        if decoded.headerHash != headerHash {
+            // A crash between the header write and the manifest write leaves them out of
+            // step. If the password slot in this very header unwrapped the key, the header
+            // is genuine: heal the manifest instead of locking the user out.
+            guard headerProven else { throw VaultError.corruptManifest }
+            decoded.headerHash = headerHash
+            repairManifest = true
         }
         candidate.wipe()
         manifest = decoded
         installKeys(vk)
+        if repairManifest { try writeManifest(bumpingGeneration: true) }
         try migrateLegacyTouchIDSlot()
     }
 
@@ -308,11 +322,13 @@ public final class VaultStore: @unchecked Sendable {
 
     private var syncStateURL: URL { url.appendingPathComponent(SyncState.fileName) }
 
-    public var syncState: SyncState {
+    /// Absent file = never synced. A present but unreadable file is an error, because a
+    /// missing `lastGeneration` would silently disable rollback detection.
+    public func loadSyncState() throws -> SyncState {
         mutex.lock(); defer { mutex.unlock() }
-        guard let data = try? Data(contentsOf: syncStateURL),
-              let s = try? JSONCoding.decoder.decode(SyncState.self, from: data) else { return SyncState() }
-        return s
+        guard FileManager.default.fileExists(atPath: syncStateURL.path) else { return SyncState() }
+        do { return try JSONCoding.decoder.decode(SyncState.self, from: try AtomicFile.read(syncStateURL)) }
+        catch { throw VaultError.io("sync.json is unreadable; refusing to sync without the last known generation (\(error.localizedDescription))") }
     }
 
     public func saveSyncState(_ state: SyncState) throws {
@@ -353,9 +369,15 @@ public final class VaultStore: @unchecked Sendable {
     /// Proves remote bytes belong to this vault (overview box opens with our key) and are
     /// internally consistent. Throws `corruptItemData` or `authenticationFailed`.
     @discardableResult
-    public func verifyRemoteItem(_ data: Data) throws -> ItemFileHeader {
+    public func verifyRemoteItem(_ data: Data, expectedVersion: UInt64 = 0) throws -> ItemFileHeader {
         mutex.lock(); defer { mutex.unlock() }
-        return try ItemFile.decodeOverview(data, keys: try requireKeys()).header
+        let keys = try requireKeys()
+        let header = try ItemFile.decodeOverview(data, keys: keys).header
+        // The manifest promised at least this version; an older file is a withheld update.
+        guard header.version >= expectedVersion else { throw VaultError.corruptItemData }
+        // Open the details box now so a truncated or corrupted file is refused at pull time.
+        if !header.deleted { _ = try ItemFile.decodeDetails(data, keys: keys) }
+        return header
     }
 
     /// Stores verified remote bytes as-is (no re-encryption). Does not touch the manifest.
@@ -383,8 +405,10 @@ public final class VaultStore: @unchecked Sendable {
         var winDetails = localWins ? lDetails : rDetails
         let loseDetails = localWins ? rDetails : lDetails
 
+        // Every losing field that differs goes to history (notes and hosts too, not only
+        // secrets), so nothing is lost. Deterministic order for identical results on both sides.
         var additions: [SecretRevision] = []
-        for key in ItemType.secretFieldKeys {
+        for key in loseDetails.fields.keys.sorted() {
             guard let v = loseDetails.fields[key], !v.isEmpty, v != winDetails.fields[key],
                   !winDetails.history.contains(where: { $0.field == key && $0.value == v }) else { continue }
             additions.append(SecretRevision(field: key, value: v, changedAt: lose.overview.updatedAt))
@@ -396,8 +420,9 @@ public final class VaultStore: @unchecked Sendable {
         overview.updatedAt = Date().millisecondPrecision
         let version = max(l.header.version, r.header.version) + 1
         let deleted = win.header.deleted
-        return try ItemFile.encode(overview: overview, details: deleted ? nil : winDetails,
-                                   version: version, deleted: deleted, keys: keys)
+        // A tombstone that beat an edit keeps that edit in history, so the deletion is recoverable.
+        let details: ItemDetails? = deleted ? (additions.isEmpty ? nil : ItemDetails(fields: [:], history: winDetails.history)) : winDetails
+        return try ItemFile.encode(overview: overview, details: details, version: version, deleted: deleted, keys: keys)
     }
 
     /// Replaces the local manifest with a merged one (no generation bump; the engine set it).
@@ -420,6 +445,8 @@ public final class VaultStore: @unchecked Sendable {
         try AtomicFile.write(bytes, to: headerURL)
         header = h
         manifest.headerHash = ManifestFile.sha256(bytes)
+        // Persist immediately: if the sync round fails later, the disk still verifies on the next unlock.
+        try writeManifest(bumpingGeneration: false)
     }
 
     // MARK: Files

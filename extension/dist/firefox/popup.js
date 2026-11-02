@@ -60,10 +60,9 @@ $("save").addEventListener("click", async () => {
 
 $("generate").addEventListener("click", async () => {
   const r = await send({ type: "generate" });
-  if (r && r.ok && r.password) {
-    try { await navigator.clipboard.writeText(r.password); note("New password copied (clears in Vault's timer)."); }
-    catch { note(r.password); }
-  } else note("Vault is not available.");
+  if (r && r.ok && !r.locked) note("New password copied by Vault; it clears after the vault's timer.");
+  else if (r && r.locked) show("locked");
+  else note("Vault is not available.");
 });
 
 $("open").addEventListener("click", () => send({ type: "open" }));

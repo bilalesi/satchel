@@ -60,7 +60,7 @@ final class SyncEngineTests: XCTestCase {
         XCTAssertEqual(Set(loaded.items.map(\.title)), ["Gmail", "Discord"])
         XCTAssertEqual(loaded.corrupt, [])
         XCTAssertEqual(try password(b, o1.id), "a1")
-        XCTAssertEqual(b.syncState.lastGeneration, a.manifest.generation)
+        XCTAssertEqual(try b.loadSyncState().lastGeneration, a.manifest.generation)
         // A second sync on either side moves nothing.
         remote.resetCounters()
         let again = try await sync(b)
@@ -190,6 +190,38 @@ final class SyncEngineTests: XCTestCase {
         }
         XCTAssertEqual(try password(b, o.id), "1")
         XCTAssertEqual(b.manifest.version(of: o.id), 1)
+    }
+
+    func testStaleRemoteFileBelowManifestVersionRejected() async throws {
+        let a = try makeA()
+        let (o, d) = login("Gmail", "1")
+        try a.save(overview: o, details: d)
+        try await sync(a)
+        let b = try await bootstrapB()
+        let v1 = remote[RemotePaths.item(o.id)]!
+        try a.save(overview: o, details: ItemDetails(fields: ["password": "2"]))
+        try await sync(a) // manifest now says v2
+        remote[RemotePaths.item(o.id)] = v1 // provider withholds the update and serves the old file
+        do { try await sync(b); XCTFail("expected rejection") } catch {
+            XCTAssertEqual(error as? VaultError, .corruptItemData)
+        }
+        XCTAssertEqual(try password(b, o.id), "1")
+        XCTAssertEqual(b.manifest.version(of: o.id), 1)
+    }
+
+    func testFailedRoundAfterRemotePasswordChangeDoesNotLockOut() async throws {
+        let a = try makeA()
+        try a.save(overview: login("X", "x").0, details: login("X", "x").1)
+        try await sync(a)
+        let b = try await bootstrapB()
+        try await Task.sleep(for: .milliseconds(3))
+        try a.changePassword(old: pw, new: SecureBytes(utf8: "new one"), kdfParams: cheap)
+        try await sync(a)
+        remote.failPutsAfter = 0 // B applies the new header, then the manifest put fails
+        do { try await sync(b); XCTFail() } catch { XCTAssertEqual(error as? SyncError, .network("injected")) }
+        b.lock()
+        try b.unlock(password: SecureBytes(utf8: "new one")) // header and manifest on disk still agree
+        XCTAssertEqual(try b.loadOverviews().items.count, 1)
     }
 
     func testTamperedRemoteManifestRejected() async throws {

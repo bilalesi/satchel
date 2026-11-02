@@ -136,12 +136,15 @@
     return el.matches(USERNAME_SELECTOR) && passwordFieldFor(el) !== null;
   }
 
+  // Only real user input may open the dropdown or trigger a fill: a page script can
+  // dispatch synthetic events, and those carry isTrusted === false.
   document.addEventListener("focusin", (e) => {
+    if (!e.isTrusted) return;
     if (isLoginField(e.target)) refresh(e.target);
   }, true);
   document.addEventListener("focusout", () => { setTimeout(closeDropdown, 150); }, true);
   document.addEventListener("keydown", (e) => {
-    if (!dropdown) return;
+    if (!e.isTrusted || !dropdown) return;
     if (e.key === "Escape") { closeDropdown(); return; }
     if (e.key === "Enter" && e.altKey) {
       e.preventDefault();

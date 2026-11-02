@@ -71,8 +71,13 @@ enum AutoType {
         if IsSecureEventInputEnabled() {
             throw AutoTypeError.secureInput(secureInputAppName())
         }
-        try postKeystrokes(text)
+        // Keystrokes go to whatever is in front; the AX probing above may have taken a while.
+        try postKeystrokes(text, onlyWhileFrontmost: app.processIdentifier, name: name)
         return .keystrokes
+    }
+
+    static func isFrontmost(_ pid: pid_t) -> Bool {
+        NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
     }
 
     // MARK: Accessibility
@@ -126,11 +131,13 @@ enum AutoType {
     // MARK: Keystrokes
 
     /// Unicode keystrokes are layout-independent: every character arrives as typed.
-    private static func postKeystrokes(_ text: String) throws {
+    private static func postKeystrokes(_ text: String, onlyWhileFrontmost pid: pid_t, name: String) throws {
         guard let source = CGEventSource(stateID: .combinedSessionState) else { throw AutoTypeError.failed("no event source") }
         let units = Array(text.utf16)
         var i = 0
         while i < units.count {
+            // Re-checked before every chunk: if focus moved, stop instead of typing a secret elsewhere.
+            guard isFrontmost(pid) else { throw AutoTypeError.targetNotFrontmost(name) }
             let chunk = Array(units[i..<min(i + 16, units.count)])
             for keyDown in [true, false] {
                 guard let ev = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: keyDown) else {
