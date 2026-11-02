@@ -284,7 +284,8 @@ struct ItemRow: View {
             if sync.isConfigured && !sync.selection.includes(item) {
                 Icon(.lock, size: 11).foregroundStyle(.tertiary).tooltip("Stays on this Mac")
             }
-            Text(item.updatedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
+            // A date a hair ahead of the clock (saved a moment ago) must not read "in 0s".
+            Text(min(item.updatedAt, Date.now.addingTimeInterval(-1)), format: .relative(presentation: .numeric, unitsStyle: .narrow))
                 .font(Theme.caption).foregroundStyle(.tertiary).monospacedDigit()
                 .lineLimit(1).fixedSize()
         }

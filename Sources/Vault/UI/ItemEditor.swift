@@ -35,9 +35,10 @@ struct ItemEditor: View {
         _syncChoice = State(initialValue: syncChoice)
     }
 
-    /// Sized to the fields of the type, but never taller than the window it slides out of.
+    /// Sized to the fields of the type, but never taller than the window it slides out of. A login is the tallest
+    /// (authenticator key with its QR buttons, then notes and the linked apps): 886 shows it all, with sync on.
     private var editorHeight: CGFloat {
-        min(560 + (type == .login ? 150 : 0) + (sync.isConfigured ? 36 : 0),
+        min(560 + (type == .login ? 290 : 0) + (sync.isConfigured ? 36 : 0),
             (NSApp.windows.first { $0.isVisible && $0.title == AppIdentity.name }?.frame.height ?? 680) - 56)
     }
 

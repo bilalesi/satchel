@@ -45,7 +45,20 @@ const MESSAGES = {
   no_tab: "No page to fill.",
   timeout: "Satchel didn’t answer in time.",
 };
-const explain = (e) => MESSAGES[e] || "Something went wrong (" + e + ").";
+// The popup is read from disk when it opens, the background script only when the extension is reloaded:
+// after an update the old background does not know the new messages. Reload once, by ourselves.
+function reloadStale() {
+  try {
+    if (sessionStorage.getItem("reloaded")) return false;
+    sessionStorage.setItem("reloaded", "1");
+  } catch { return false; }
+  setTimeout(() => browserAPI.runtime.reload(), 500);
+  return true;
+}
+const explain = (e) => {
+  if (e === "unknown_message") return reloadStale() ? "Updating the extension…" : "Reload the extension in your browser’s extensions page.";
+  return MESSAGES[e] || "Something went wrong (" + e + ").";
+};
 
 function ago(seconds) {
   const d = Math.max(0, Date.now() / 1000 - seconds);

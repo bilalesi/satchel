@@ -40,9 +40,9 @@ struct ItemDetailView: View {
                 meta
             }
             .padding(Theme.Space.xl)
-            // Readable line length on wide windows; values stay next to their copy buttons.
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Readable line length on wide windows, centred in the column; values stay next to their copy buttons.
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
         }
         .task(id: overview.updatedAt) { load() }
         .confirmationDialog("Delete “\(overview.title)”?", isPresented: $confirmDelete) {

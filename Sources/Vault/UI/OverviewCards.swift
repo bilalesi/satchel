@@ -25,8 +25,8 @@ struct OverviewCards: View {
                 }
             }
             .padding(Theme.Space.xl)
-            .frame(maxWidth: Self.maxContentWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: Self.maxContentWidth)
+            .frame(maxWidth: .infinity)
         }
         // Reason: one width read per layout pass; cheaper than a GeometryReader around the content.
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
