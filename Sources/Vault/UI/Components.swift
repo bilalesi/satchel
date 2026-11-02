@@ -313,6 +313,7 @@ struct AnchorReader: NSViewRepresentable {
 final class MenuPanelController {
     static let shared = MenuPanelController()
     private var panel: MenuPanel?
+    private var dismissHandler: (() -> Void)?
 
     func show(items: [MenuItem], anchor: NSView, minWidth: CGFloat) {
         close()
@@ -343,13 +344,14 @@ final class MenuPanelController {
     /// Any SwiftUI content in the same floating card as the menus (the main menu, the icon and
     /// colour picker). `content` gets a closure that closes the card. The card keeps the app's
     /// environment only through what the caller passes in: it lives in its own window.
-    func showContent<Content: View>(anchor: NSView, placement: Placement = .below,
+    func showContent<Content: View>(anchor: NSView, placement: Placement = .below, onDismiss: (() -> Void)? = nil,
                                     @ViewBuilder content: (_ close: @escaping () -> Void) -> Content) {
         close()
         guard let window = anchor.window else { return }
         let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let body = content { [weak self] in self?.close() }
-        let host = NSHostingView(rootView: PanelSurface { body })
+        dismissHandler = onDismiss
+        let host = NSHostingView(rootView: body)
         let size = host.fittingSize
         present(host, size: size, anchorRect: anchorRect, window: window, xOffset: 0, placement: placement)
     }
@@ -374,8 +376,7 @@ final class MenuPanelController {
         p.hasShadow = true
         p.level = .popUpMenu
         p.isReleasedWhenClosed = false
-        host.frame = NSRect(origin: .zero, size: size)
-        p.contentView = host
+        p.contentView = glassContainer(for: host, size: size)
         p.onDismiss = { [weak self] in self?.close() }
         AppSettings.applyCapturePolicy(to: p)
         window.addChildWindow(p, ordered: .above)
@@ -388,6 +389,37 @@ final class MenuPanelController {
         panel = nil
         p.parent?.removeChildWindow(p)
         p.orderOut(nil)
+        let handler = dismissHandler
+        dismissHandler = nil
+        handler?()
+    }
+
+    /// The card's background is the system's own glass (`NSGlassEffectView`, as in system menus), not
+    /// a SwiftUI imitation drawn inside a clear window. Before macOS 26 it is the closest material.
+    private func glassContainer(for host: NSView, size: NSSize) -> NSView {
+        let frame = NSRect(origin: .zero, size: size)
+        host.frame = frame
+        host.wantsLayer = true
+        host.layer?.cornerRadius = Theme.radius
+        host.layer?.cornerCurve = .continuous
+        host.layer?.masksToBounds = true
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView(frame: frame)
+            glass.cornerRadius = Theme.radius
+            glass.contentView = host
+            return glass
+        }
+        let blur = NSVisualEffectView(frame: frame)
+        blur.material = .popover
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.wantsLayer = true
+        blur.layer?.cornerRadius = Theme.radius
+        blur.layer?.cornerCurve = .continuous
+        blur.layer?.masksToBounds = true
+        host.autoresizingMask = [.width, .height]
+        blur.addSubview(host)
+        return blur
     }
 }
 
@@ -429,8 +461,6 @@ private struct MenuList: View {
         .scrollIndicators(.automatic)
         .frame(minWidth: minWidth, alignment: .leading)
         .fixedSize(horizontal: true, vertical: false)
-        .glassSurface(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
         .focusable()
         .focused($focused)
         .focusEffectDisabled()
@@ -625,9 +655,6 @@ struct InfoCard: View {
         }
         .padding(Theme.Space.m)
         .frame(width: width, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.hairline))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
         .onTapGesture(perform: onDone)
     }
 }

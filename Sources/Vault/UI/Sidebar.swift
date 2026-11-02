@@ -217,13 +217,14 @@ private struct CategoryDraftRow: View {
         HStack(spacing: Theme.Space.s) {
             Button {
                 guard let view = anchor.view else { return }
-                MenuPanelController.shared.showContent(anchor: view, placement: .trailing) { _ in
+                // The card is anchored to the whole row, so it opens beside the menu and never covers
+                // the field being typed in; typing resumes where it was when the card closes.
+                MenuPanelController.shared.showContent(anchor: view, placement: .trailing, onDismiss: { focused = true }) { _ in
                     StylePickerCard(iconName: $draft.iconName, colorName: $draft.colorName)
                 }
             } label: { LookTile(iconName: draft.iconName, colorName: draft.colorName, size: 18) }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
-                .background(AnchorReader(box: anchor))
                 .help("Choose icon and colour")
             TextField("Name, then Return", text: $draft.name)
                 .textFieldStyle(.plain)
@@ -234,6 +235,7 @@ private struct CategoryDraftRow: View {
         .padding(.horizontal, Theme.Space.s)
         .frame(height: 30)
         .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous))
+        .background(AnchorReader(box: anchor))
         .onAppear { focused = true }
     }
 }
