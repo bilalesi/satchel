@@ -76,11 +76,14 @@ struct MainWindow: View {
                 // Menu, list and detail are separate rounded blocks with a gap between them.
                 HStack(spacing: Theme.blockGap) {
                     MenuColumn(selection: $selection, expanded: menuExpanded)
-                    ItemList(filter: selection ?? .home, query: $query, selectedItem: $selectedItem)
-                        .frame(width: listWidth)
-                        .block()
-                    SplitHandle(width: $listWidth, range: 280...480)
-                    detail.frame(minWidth: 380, maxWidth: .infinity).block()
+                    // The handle is the only space between list and detail: one gap, not three.
+                    HStack(spacing: 0) {
+                        ItemList(filter: selection ?? .home, query: $query, selectedItem: $selectedItem)
+                            .frame(width: listWidth)
+                            .block()
+                        SplitHandle(width: $listWidth, range: 280...480)
+                        detail.frame(minWidth: 380, maxWidth: .infinity).block()
+                    }
                 }
                 .padding(.trailing, Theme.blockGap)
                 .padding(.bottom, Theme.blockGap)
@@ -151,8 +154,9 @@ struct ItemList: View {
 
     var body: some View {
         let list = items
-        List(selection: $selectedItem) {
-            Section {
+        VStack(spacing: 0) {
+            header(count: list.count)
+            List(selection: $selectedItem) {
                 ForEach(list) { item in
                     ItemRow(item: item)
                         .tag(item.id)
@@ -164,22 +168,35 @@ struct ItemList: View {
                             Button(item.favorite ? "Remove from favorites" : "Add to favorites") { toggleFavorite(item) }
                         }
                 }
-            } header: {
-                HStack {
-                    Text(query.isEmpty ? title : "Results")
-                    Spacer()
-                    Text("\(list.count)").monospacedDigit()
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .overlay {
+                if list.isEmpty {
+                    EmptyState(icon: query.isEmpty ? .inbox : .search, title: query.isEmpty ? "No items yet" : "No matches")
                 }
-                .font(Theme.label).tracking(Theme.labelTracking).textCase(.uppercase)
-                .foregroundStyle(.secondary)
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-        .overlay {
-            if list.isEmpty {
-                EmptyState(icon: query.isEmpty ? .inbox : .search, title: query.isEmpty ? "No items yet" : "No matches")
+    }
+
+    /// Title and count, with room to breathe: this is the heading of the whole column.
+    private func header(count: Int) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: Theme.Space.s + 2) {
+                Text(query.isEmpty ? title : "Results")
+                    .font(.system(size: 17, weight: .semibold))
+                    .lineLimit(1)
+                Text("\(count)")
+                    .font(Theme.caption.weight(.medium)).monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, Theme.Space.s)
+                    .frame(height: 20)
+                    .background(Color.primary.opacity(0.07), in: Capsule())
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, Theme.Space.l + 2)
+            .frame(height: 56)
+            Divider().padding(.horizontal, Theme.Space.m)
         }
     }
 

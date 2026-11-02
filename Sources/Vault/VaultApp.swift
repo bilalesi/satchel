@@ -61,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var bridge: BridgeServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSScrollView.installRoundedScrollers()
         #if DEBUG
         if let folder = ProcessInfo.processInfo.environment["SATCHEL_SPLASH_DUMP"] { SplashDump.run(to: folder); return }
         #endif
