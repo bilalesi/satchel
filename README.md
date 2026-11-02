@@ -104,6 +104,10 @@ Without the secret the release is published unsigned and installed apps ignore i
 
 Never put your own vault into this repository. Use a separate private repository for sync.
 
+## Contributing
+
+Contributions are welcome through forks and pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Every change needs the maintainer's approval and a passing check before it merges. Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
 Satchel is **source-available for noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, study, change and share it for personal use, hobby projects, research, education, and inside charities, schools and public institutions. You may not use it for a commercial purpose, for example at a company for work, or inside a product or service you sell. For commercial use, contact the author through the GitHub profile.
