@@ -4,11 +4,19 @@ name: Release
 on:
   push:
     branches: [main]
-    # Docs-only pushes don't release.
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - ".gitignore"
+    # Only changes to the app (or to this pipeline) release; docs, templates and repository settings do not.
+    paths:
+      - "Sources/**"
+      - "Tests/**"
+      - "Resources/**"
+      - "scripts/**"
+      - "extension/**"
+      - "Package.swift"
+      - "Package.resolved"
+      - "THIRD_PARTY_NOTICES.md"
+      - "LICENSE"
+      - ".github/workflows/release.yml"
+      - ".github/release-notes.md.tmpl"
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,30 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not paste vault contents, passwords, tokens or screenshots that show secrets. Security problems go to a private advisory (see the link on the issue chooser)."
+  - type: input
+    id: version
+    attributes:
+      label: Satchel version
+      description: Settings → Vault → Version
+    validations: { required: true }
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac type
+      placeholder: "macOS 26.1, Apple silicon"
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: What happened, and what did you expect?
+      description: Steps to reproduce help most.
+    validations: { required: true }
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Vault and items, Sync, Browser extension, Quick Access and auto-type, Updates, Other]

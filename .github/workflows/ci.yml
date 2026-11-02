@@ -1,0 +1,37 @@
+name: CI
+
+# Runs on every pull request, including from forks. A fork's workflow run gets a read-only token and
+# no secrets, and an outside contributor's first run needs the owner's approval (repository setting).
+# The pull_request trigger is used on purpose: pull_request_target would run with secrets.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true # a new push to the same pull request replaces the running check
+
+jobs:
+  test:
+    # This name is the required status check of the main branch ruleset.
+    name: Test
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      # Actions are pinned to a full commit hash, not a movable tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select the newest Xcode 26
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          swift --version
+
+      - name: Test
+        run: swift test

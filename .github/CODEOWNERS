@@ -1,0 +1,20 @@
+# Every change needs a review from a code owner before it can merge (main branch ruleset).
+# The owner decides what merges. When maintainers are added, list them on the "*" line only;
+# the paths below stay with the owner because they decide what the app trusts and what ships.
+
+*                                    @bilalesi
+
+/.github/                            @bilalesi
+/scripts/                            @bilalesi
+/Resources/update-public-key.txt     @bilalesi
+/Package.swift                       @bilalesi
+/Package.resolved                    @bilalesi
+/LICENSE                             @bilalesi
+/Sources/VaultCore/Crypto/           @bilalesi
+/Sources/VaultCore/Sync/             @bilalesi
+/Sources/VaultCore/Update/           @bilalesi
+/Sources/VaultCore/Store/            @bilalesi
+/Sources/Vault/Update/               @bilalesi
+/Sources/Vault/Bridge/               @bilalesi
+/Sources/VaultHost/                  @bilalesi
+/extension/                          @bilalesi

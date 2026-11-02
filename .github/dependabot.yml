@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # Pinned action hashes and Swift packages (libsodium) are updated by pull requests the owner reviews.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: weekly
