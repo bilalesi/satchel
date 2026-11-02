@@ -4,6 +4,7 @@
 #   scripts/demo.sh            seed, build, launch
 #   WAIT=10 scripts/demo.sh    seconds to wait for the window
 #   EXTRA_ENV="A=1 B=2" scripts/demo.sh   extra environment for the app (debug switches)
+#   DEMO_SYNC=1 scripts/demo.sh   Personal already syncs to a folder, Banking kept on this Mac
 # Master password of every demo workspace: demo-password-123
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,7 +16,7 @@ APP="$DEMO/Satchel.app"
 pkill -f "$APP/Contents/MacOS/Satchel" 2>/dev/null || true
 
 # 1. Vaults: four workspaces with categories and items of every type.
-SATCHEL_DEMO_DIR="$DEMO/vaults" swift test --filter DemoVaultSeeder >/dev/null
+env ${DEMO_SYNC:+SATCHEL_DEMO_SYNC=1} SATCHEL_DEMO_DIR="$DEMO/vaults" swift test --filter DemoVaultSeeder >/dev/null
 
 # 2. A debug build under its own identity (debug builds can unlock the demo vault without typing).
 ./scripts/bundle.sh debug >/dev/null

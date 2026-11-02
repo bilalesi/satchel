@@ -3,6 +3,7 @@ import VaultCore
 
 struct ItemDetailView: View {
     @EnvironmentObject var session: VaultSession
+    @EnvironmentObject var sync: SyncCoordinator
     let overview: ItemOverview
     let onEdit: () -> Void
 
@@ -78,6 +79,7 @@ struct ItemDetailView: View {
         let rotateHelp = "Generate a new \(Theme.label(overview.type.primarySecretField).lowercased()); the old one is kept in history"
         let canRotate = details != nil && ItemType.secretFieldKeys.contains(overview.type.primarySecretField)
         return HStack(spacing: Theme.Space.s) {
+            if sync.isConfigured { ItemSyncButton(overview: overview, labels: labels) }
             if labels {
                 PillButton("Rotate", icon: .refresh) { rotate() }.help(rotateHelp).disabled(!canRotate)
                 PillButton("Edit", icon: .edit) { onEdit() }.help("Edit this item")

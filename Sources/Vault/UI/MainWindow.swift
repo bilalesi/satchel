@@ -166,6 +166,7 @@ struct Responsive {
 
 struct ItemList: View {
     @EnvironmentObject var session: VaultSession
+    @EnvironmentObject var sync: SyncCoordinator
     let filter: SidebarSelection
     @Binding var query: String
     @Binding var selectedItem: UUID?
@@ -260,6 +261,7 @@ struct ItemList: View {
 
 /// One list row. The title gets layout priority; the date uses the narrow style ("2d ago").
 struct ItemRow: View {
+    @EnvironmentObject var sync: SyncCoordinator
     let item: ItemOverview
 
     var body: some View {
@@ -278,6 +280,10 @@ struct ItemRow: View {
             }
             .layoutPriority(1)
             Spacer(minLength: Theme.Space.s)
+            // A lock marks a secret that stays on this Mac, so the choice is visible without opening it.
+            if sync.isConfigured && !sync.selection.includes(item) {
+                Icon(.lock, size: 11).foregroundStyle(.tertiary).tooltip("Stays on this Mac")
+            }
             Text(item.updatedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
                 .font(Theme.caption).foregroundStyle(.tertiary).monospacedDigit()
                 .lineLimit(1).fixedSize()

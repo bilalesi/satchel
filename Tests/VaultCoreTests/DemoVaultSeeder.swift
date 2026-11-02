@@ -129,6 +129,17 @@ final class DemoVaultSeeder: XCTestCase {
                                      createdAt: now - (r.days + 30) * 86400, updatedAt: now - r.days * 86400)
                 try store.save(overview: o, details: ItemDetails(fields: r.fields), stampingNow: false)
             }
+            // SATCHEL_DEMO_SYNC: Personal already syncs to a folder, with its first category (Banking) kept on this Mac.
+            if ProcessInfo.processInfo.environment["SATCHEL_DEMO_SYNC"] != nil, space.name == "Personal" {
+                let target = URL(fileURLWithPath: "/tmp/Dropbox/Satchel", isDirectory: true)
+                try? FileManager.default.removeItem(at: target.deletingLastPathComponent())
+                try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+                // The JSON the app writes for its `folder` remote (`RemoteConfig`), stored as a local secret.
+                try store.setLocalSecret("sync-config", "{\"folder\":{\"_0\":\"\(target.absoluteString)\"}}")
+                var selection = SyncSelection()
+                selection.excludedCategories = [categoryIDs[0]]
+                try store.setLocalSecret(SyncSelection.secretName, String(decoding: try JSONEncoder().encode(selection), as: UTF8.self))
+            }
             let loaded = try store.loadOverviews().items
             XCTAssertEqual(loaded.count, space.rows.count + space.categories.count, space.name)
             registry.append(["id": space.id, "name": space.name, "path": url.path, "iconName": space.icon, "colorName": space.color])
