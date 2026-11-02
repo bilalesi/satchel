@@ -239,7 +239,7 @@ struct SyncSettings: View {
             PillButton("Save", icon: .save, kind: .primary) { save() }
                 .disabled(!draft.isComplete || saving || draft == RemoteDraft(sync.config) && draft.secret.isEmpty)
             Spacer()
-            PillButton("Sync now", icon: .sync) { Task { await sync.syncNow() } }
+            PillButton("Sync now", icon: .sync) { Task { await sync.syncNow(announce: true) } }
                 .disabled(!sync.isConfigured || session.state != .unlocked || sync.status == .syncing)
         }
     }

@@ -17,6 +17,7 @@ final class SyncCoordinator: ObservableObject {
 
     @Published private(set) var status: Status = .off
     @Published private(set) var lastSyncAt: Date?
+    private var announceNext = false
     @Published private(set) var lastReport: SyncReport?
     @Published private(set) var config: RemoteConfig = .off
     @Published private(set) var selection = SyncSelection()
@@ -173,8 +174,10 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
-    func syncNow() async {
+    /// `announce`: the user asked for this run, so its end is shown at the notch (automatic runs stay silent).
+    func syncNow(announce: Bool = false) async {
         guard session?.store?.isUnlocked == true, isConfigured else { return }
+        if announce { announceNext = true }
         if running { dirty = true; return }
         running = true
         defer { running = false }
@@ -183,6 +186,19 @@ final class SyncCoordinator: ObservableObject {
             dirty = false
             await runOnce()
         } while dirty && session?.store?.isUnlocked == true
+        if announceNext {
+            announceNext = false
+            switch status {
+            case .idle: NotchHUD.shared.show(title: "Sync finished", detail: lastReport.map(Self.summary) ?? "Everything is up to date")
+            case .error(let text): NotchHUD.shared.show(title: "Sync failed", detail: text)
+            default: break
+            }
+        }
+    }
+
+    private static func summary(_ r: SyncReport) -> String {
+        if r.pulled == 0 && r.pushed == 0 { return "Everything is up to date" }
+        return "\(r.pulled) received, \(r.pushed) sent"
     }
 
     private func runOnce() async {

@@ -88,10 +88,20 @@ final class UpdateManager: NSObject, ObservableObject {
     /// Checks shortly after launch and then every six hours, if the user allows it.
     func start() {
         guard timer == nil else { return }
+        announceInstalledUpdate()
         Task { try? await Task.sleep(for: .seconds(8)); await check(manual: false) }
         timer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.check(manual: false) }
         }
+    }
+
+    /// The version that ran last time is remembered; when it is older than this one, an update was installed.
+    private func announceInstalledUpdate() {
+        let key = "lastRunVersion", defaults = UserDefaults.standard
+        let now = currentVersion
+        defer { defaults.set(now.description, forKey: key) }
+        guard let old = defaults.string(forKey: key).flatMap(AppVersion.init), old < now else { return }
+        NotchHUD.shared.show(title: "Satchel updated", detail: "Now on version \(now)")
     }
 
     // MARK: Check
@@ -115,6 +125,9 @@ final class UpdateManager: NSObject, ObservableObject {
             if status == 404 { state = previousOrIdle(previous); if manual { message = "You're up to date." }; return }
             guard status == 200 else { throw URLError(.badServerResponse) }
             if let offer = UpdateFeed.parse(data, current: currentVersion, repository: repository, allowLocal: allowLocal) {
+                if case .available(let known) = previous, known.version == offer.version {} else {
+                    NotchHUD.shared.show(title: "Update available", detail: "Satchel \(offer.version) is ready to download")
+                }
                 state = .available(offer)
                 Self.log.notice("update available: \(offer.version.description, privacy: .public)")
             } else {

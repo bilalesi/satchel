@@ -290,7 +290,7 @@ struct SidebarFooter: View {
             updateText: updateText, syncAvailable: sync.isConfigured, syncing: sync.status == .syncing)
         MenuPanelController.shared.showContent(anchor: view, placement: vertical ? .trailing : .above) { close in
             MainMenuCard(content: content,
-                         syncNow: { Task { await sync.syncNow() } },
+                         syncNow: { Task { await sync.syncNow(announce: true) } },
                          quickAccess: { QuickAccessController.shared.toggle() },
                          checkForUpdates: { Task { await updates.check(manual: true) } },
                          workspaces: { openSettingsTab(.vault) },

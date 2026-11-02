@@ -24,7 +24,7 @@ struct TitleBand: View {
                 }
                 .keyboardShortcut("s", modifiers: [.command, .control])
                 Spacer(minLength: Theme.Space.l)
-                MenuButton(title: "New", icon: .add, kind: .primary) {
+                MenuButton(title: "New", icon: .add, kind: .primary, alignTrailing: true) {
                     ItemType.userTypes.map { t in
                         MenuItem(title: t.displayName, icon: Theme.icon(t)) { onNew(t) }
                     } + [MenuItem(title: "Category", icon: .folder) { session.newCategoryRequested = true }]

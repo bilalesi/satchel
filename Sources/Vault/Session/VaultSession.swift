@@ -104,6 +104,7 @@ final class VaultSession: ObservableObject {
         vaultURL = target.url
         WorkspaceStore.save(workspaces, active: id)
         openVault()
+        NotchHUD.shared.show(title: target.name, detail: "Workspace switched")
     }
 
     /// Registers an empty workspace and switches to it; the lock screen then offers to create

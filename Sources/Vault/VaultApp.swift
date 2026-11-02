@@ -43,7 +43,7 @@ struct VaultApp: App {
             } else if case .ready(let o, _) = updates.state {
                 Button("Restart to update to \(o.version.description)") { Task { await updates.installAndRelaunch() } }
             }
-            Button("Sync now") { Task { await session.sync.syncNow() } }
+            Button("Sync now") { Task { await session.sync.syncNow(announce: true) } }
                 .disabled(session.state != .unlocked || !session.sync.isConfigured)
             Divider()
             Button("Open \(AppIdentity.name)") { AppDelegate.openMainWindow() }

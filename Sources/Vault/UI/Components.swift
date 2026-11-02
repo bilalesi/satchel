@@ -315,7 +315,8 @@ final class MenuPanelController {
     private var panel: MenuPanel?
     private var dismissHandler: (() -> Void)?
 
-    func show(items: [MenuItem], anchor: NSView, minWidth: CGFloat) {
+    /// `alignTrailing`: the card's right edge lines up with the anchor's (a button at the window's right side).
+    func show(items: [MenuItem], anchor: NSView, minWidth: CGFloat, alignTrailing: Bool = false) {
         close()
         guard let window = anchor.window, !items.isEmpty else { return }
         let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
@@ -325,7 +326,8 @@ final class MenuPanelController {
         })
         let fitting = host.fittingSize
         let size = NSSize(width: max(minWidth, fitting.width), height: min(fitting.height, 380))
-        present(host, size: size, anchorRect: anchorRect, window: window, xOffset: 0)
+        present(host, size: size, anchorRect: anchorRect, window: window,
+                xOffset: alignTrailing ? anchorRect.width - size.width : 0)
     }
 
     /// A small text card under an anchor (the "i" explanations). Same look and closing
@@ -373,7 +375,8 @@ final class MenuPanelController {
         let p = MenuPanel(contentRect: NSRect(origin: origin, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
-        p.hasShadow = true
+        // The system glass draws its own edge and depth; a window shadow on top of it shows as a square outline.
+        if #available(macOS 26.0, *) { p.hasShadow = false } else { p.hasShadow = true }
         p.level = .popUpMenu
         p.isReleasedWhenClosed = false
         p.contentView = glassContainer(for: host, size: size)
@@ -573,13 +576,15 @@ struct MenuButton: View {
     let icon: Codicon
     var kind: PillKind = .secondary
     var compact = false
+    var alignTrailing = false
     let items: () -> [MenuItem]
     @State private var anchor = AnchorBox()
 
     var body: some View {
         Button {
             guard let view = anchor.view else { return }
-            MenuPanelController.shared.show(items: items(), anchor: view, minWidth: max(view.bounds.width, 200))
+            MenuPanelController.shared.show(items: items(), anchor: view, minWidth: max(view.bounds.width, 200),
+                                            alignTrailing: alignTrailing)
         } label: {
             HStack(spacing: Theme.Space.s - 2) {
                 Icon(icon, size: compact ? 12 : 13)
