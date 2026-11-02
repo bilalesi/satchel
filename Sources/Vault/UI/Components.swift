@@ -321,10 +321,10 @@ final class MenuPanelController {
         guard let window = anchor.window, !items.isEmpty else { return }
         let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let showsChecks = items.contains(where: \.checked)
-        let host = NSHostingView(rootView: PanelSurface {
-            MenuList(items: items, showsChecks: showsChecks, minWidth: minWidth) { [weak self] in self?.close() }
+        let host = NSHostingView(rootView: MenuList(items: items, showsChecks: showsChecks, minWidth: minWidth) { [weak self] in
+            self?.close()
         })
-        let fitting = host.fittingSize.insetBy(PanelInset.value)
+        let fitting = host.fittingSize
         let size = NSSize(width: max(minWidth, fitting.width), height: min(fitting.height, 380))
         present(host, size: size, anchorRect: anchorRect, window: window,
                 xOffset: alignTrailing ? anchorRect.width - size.width : 0)
@@ -336,8 +336,8 @@ final class MenuPanelController {
         close()
         guard let window = anchor.window else { return }
         let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        let host = NSHostingView(rootView: PanelSurface { InfoCard(text: text, width: width) { [weak self] in self?.close() } })
-        let size = host.fittingSize.insetBy(PanelInset.value)
+        let host = NSHostingView(rootView: InfoCard(text: text, width: width) { [weak self] in self?.close() })
+        let size = host.fittingSize
         present(host, size: size, anchorRect: anchorRect, window: window, xOffset: -12)
     }
 
@@ -353,8 +353,8 @@ final class MenuPanelController {
         let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let body = content { [weak self] in self?.close() }
         dismissHandler = onDismiss
-        let host = NSHostingView(rootView: PanelSurface { body })
-        let size = host.fittingSize.insetBy(PanelInset.value)
+        let host = NSHostingView(rootView: body)
+        let size = host.fittingSize
         present(host, size: size, anchorRect: anchorRect, window: window, xOffset: 0, placement: placement)
     }
 
@@ -372,23 +372,67 @@ final class MenuPanelController {
             origin.y = min(max(origin.y, visible.minY + 4), visible.maxY - size.height - 4)
             origin.x = min(max(origin.x, visible.minX + 4), visible.maxX - size.width - 4)
         }
-        // The window is the card plus a transparent margin that holds the shadow. The window's own shadow is
-        // off: it is computed from the first frame and shows as a square outline around the window.
-        let inset = PanelInset.value
-        let frame = NSRect(x: origin.x - inset, y: origin.y - inset, width: size.width + 2 * inset, height: size.height + 2 * inset)
-        let p = MenuPanel(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let p = MenuPanel(contentRect: NSRect(origin: origin, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
-        p.hasShadow = false
+        // The window shadow follows the blur view's rounded mask, as it does for system menus.
+        p.hasShadow = true
         p.level = .popUpMenu
         p.isReleasedWhenClosed = false
-        host.frame = NSRect(origin: .zero, size: frame.size)
-        p.contentView = host
+        p.contentView = Self.cardView(for: host, size: size)
         p.onDismiss = { [weak self] in self?.close() }
         AppSettings.applyCapturePolicy(to: p)
         window.addChildWindow(p, ordered: .above)
         p.makeKeyAndOrderFront(nil)
         panel = p
+        // The shadow is computed from the first frame; recompute it once the content has drawn.
+        DispatchQueue.main.async { [weak p] in p?.invalidateShadow() }
+    }
+
+    /// A translucent rounded card the way AppKit makes non-rectangular blur windows: a visual-effect view
+    /// whose `maskImage` is a stretchable rounded rectangle, so the blur, the window shadow and the corners
+    /// all follow the same shape. SwiftUI's glass drawn inside a pop-up window paints a rectangle the size
+    /// of the window instead. A hairline on top gives the edge.
+    private static func cardView(for host: NSView, size: NSSize) -> NSView {
+        let bounds = NSRect(origin: .zero, size: size)
+        let blur = NSVisualEffectView(frame: bounds)
+        blur.material = .popover
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.maskImage = roundedMask(radius: Theme.radius)
+        host.frame = bounds
+        host.autoresizingMask = [.width, .height]
+        blur.addSubview(host)
+        let edge = EdgeView(frame: bounds, radius: Theme.radius)
+        edge.autoresizingMask = [.width, .height]
+        blur.addSubview(edge)
+        return blur
+    }
+
+    private static func roundedMask(radius: CGFloat) -> NSImage {
+        let side = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
+    }
+
+    private final class EdgeView: NSView {
+        init(frame: NSRect, radius: CGFloat) {
+            super.init(frame: frame)
+            wantsLayer = true
+            layer?.cornerRadius = radius
+            layer?.cornerCurve = .continuous
+            layer?.borderWidth = 0.5
+            layer?.borderColor = NSColor.separatorColor.cgColor
+        }
+        required init?(coder: NSCoder) { fatalError() }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidChangeEffectiveAppearance() { layer?.borderColor = NSColor.separatorColor.cgColor }
     }
 
     func close() {
@@ -415,26 +459,6 @@ final class MenuPanel: NSPanel {
 /// The look every floating card shares: Liquid Glass (a material before macOS 26), a hairline edge so the
 /// card stands out from a white window, and a soft shadow. The transparent `inset` around the card is where
 /// the shadow is drawn; the window is that much larger than the card.
-/// Width of the transparent margin around a card, where its shadow is drawn.
-enum PanelInset { static let value: CGFloat = 16 }
-
-struct PanelSurface<Content: View>: View {
-    @ViewBuilder var content: Content
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-        content
-            .glassSurface(shape)
-            .clipShape(shape)
-            .overlay(shape.strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.75))
-            .shadow(color: .black.opacity(0.28), radius: 12, y: 5)
-            .padding(PanelInset.value)
-    }
-}
-
-private extension NSSize {
-    func insetBy(_ inset: CGFloat) -> NSSize { NSSize(width: width - 2 * inset, height: height - 2 * inset) }
-}
-
 private struct MenuList: View {
     let items: [MenuItem]
     let showsChecks: Bool
