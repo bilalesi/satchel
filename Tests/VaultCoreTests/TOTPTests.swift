@@ -39,3 +39,50 @@ final class TOTPTests: XCTestCase {
         XCTAssertEqual(t.secondsRemaining(at: Date(timeIntervalSince1970: 60)), 30)
     }
 }
+
+import CoreImage
+@testable import VaultCore
+
+final class AuthenticatorImportTests: XCTestCase {
+    func testLabelFromOtpauthLink() {
+        XCTAssertEqual(TOTP.label(of: "otpauth://totp/GitHub:alex-dev?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"),
+                       TOTP.Label(issuer: "GitHub", account: "alex-dev"))
+        XCTAssertEqual(TOTP.label(of: "otpauth://totp/alex%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Google%20Workspace"),
+                       TOTP.Label(issuer: "Google Workspace", account: "alex@example.com"))
+        XCTAssertEqual(TOTP.label(of: "otpauth://totp/Acme%20Corp:bob@corp.example?secret=JBSWY3DPEHPK3PXP"),
+                       TOTP.Label(issuer: "Acme Corp", account: "bob@corp.example"))
+        XCTAssertNil(TOTP.label(of: "JBSWY3DPEHPK3PXP"))
+    }
+
+    /// Draws a real QR code and reads it back, the way a screenshot of a site's 2FA page would be read.
+    func testQRCodeRoundTrip() throws {
+        let link = "otpauth://totp/Satchel:test@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Satchel"
+        let filter = CIFilter(name: "CIQRCodeGenerator")!
+        filter.setValue(Data(link.utf8), forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        let output = try XCTUnwrap(filter.outputImage).transformed(by: CGAffineTransform(scaleX: 8, y: 8))
+        let cg = try XCTUnwrap(CIContext().createCGImage(output, from: output.extent))
+        XCTAssertEqual(QRCode.decode(cg), [link])
+
+        let png = try XCTUnwrap(NSBitmapImageRepCompat.png(cg))
+        XCTAssertEqual(QRCode.decode(data: png), [link])
+        XCTAssertNotNil(TOTP(link))
+    }
+
+    func testNoQRCodeInAnEmptyImage() throws {
+        let ctx = try XCTUnwrap(CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
+                                          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        XCTAssertEqual(QRCode.decode(try XCTUnwrap(ctx.makeImage())), [])
+        XCTAssertEqual(QRCode.decode(data: Data("not an image".utf8)), [])
+    }
+}
+
+private enum NSBitmapImageRepCompat {
+    static func png(_ image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, image, nil)
+        return CGImageDestinationFinalize(dest) ? data as Data : nil
+    }
+}

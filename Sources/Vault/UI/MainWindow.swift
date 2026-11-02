@@ -8,11 +8,6 @@ enum SidebarSelection: Hashable {
     case category(UUID)
 }
 
-struct CategorySheetRequest: Identifiable {
-    let id = UUID()
-    let existing: CategoryInfo?
-}
-
 struct MainWindow: View {
     @EnvironmentObject var session: VaultSession
     @EnvironmentObject var sync: SyncCoordinator
@@ -21,13 +16,26 @@ struct MainWindow: View {
     @State private var query = ""
     @State private var editing: ItemOverview?
     @State private var creatingType: ItemType?
-    @State private var categorySheet: CategorySheetRequest?
 
     var body: some View {
         Group {
             if session.state == .unlocked {
+                HStack(spacing: 0) {
+                    WorkspaceRail()
+                    splitView
+                }
+            } else {
+                UnlockView()
+            }
+        }
+        .frame(minWidth: 820, minHeight: 520)
+        .excludedFromCapture()
+        .onChange(of: session.state) { _, s in if s != .unlocked { selectedItem = nil } }
+    }
+
+    private var splitView: some View {
                 NavigationSplitView {
-                    Sidebar(selection: $selection, onCategory: { categorySheet = $0 })
+                    Sidebar(selection: $selection)
                 } content: {
                     ItemList(filter: selection ?? .home, query: $query, selectedItem: $selectedItem)
                 } detail: {
@@ -35,13 +43,12 @@ struct MainWindow: View {
                 }
                 .searchable(text: $query, placement: .sidebar, prompt: "Search")
                 .toolbar {
-                    ToolbarItem(placement: .primaryAction) { UpdateCircle() }
                     // System toolbar styling: macOS draws one glass capsule per item.
                     ToolbarItem(placement: .primaryAction) {
                         ToolbarMenuButton(title: "New", icon: .add) {
                             ItemType.userTypes.map { t in
                                 MenuItem(title: t.displayName, icon: Theme.icon(t)) { creatingType = t }
-                            } + [MenuItem(title: "Category", icon: .folder) { categorySheet = .init(existing: nil) }]
+                            } + [MenuItem(title: "Category", icon: .folder) { session.newCategoryRequested = true }]
                         }
                         .buttonStyle(.borderedProminent)
                         .help("New item")
@@ -56,11 +63,6 @@ struct MainWindow: View {
                         .help("Lock the vault (⇧⌘L)")
                     }
                 }
-                .sheet(item: $categorySheet) { request in
-                    CategorySheet(existing: request.existing, synced: request.existing.map { sync.isSynced(category: $0.id) } ?? true) { id in
-                        selection = .category(id)
-                    }
-                }
                 .sheet(item: $creatingType) { t in
                     ItemEditor(type: t, overview: nil, details: nil, defaultCategory: currentCategory) { o, d in
                         session.save(o, d)
@@ -72,13 +74,6 @@ struct MainWindow: View {
                         session.save(o2, d2)
                     }
                 }
-            } else {
-                UnlockView()
-            }
-        }
-        .frame(minWidth: 760, minHeight: 520)
-        .excludedFromCapture()
-        .onChange(of: session.state) { _, s in if s != .unlocked { selectedItem = nil } }
     }
 
     private var currentCategory: UUID? {
@@ -97,132 +92,6 @@ struct MainWindow: View {
             EmptyState(icon: .key, title: "Select an item")
                 .background(Theme.canvas)
         }
-    }
-}
-
-struct Sidebar: View {
-    @EnvironmentObject var session: VaultSession
-    @EnvironmentObject var sync: SyncCoordinator
-    @Binding var selection: SidebarSelection?
-    var onCategory: (CategorySheetRequest) -> Void = { _ in }
-
-    var tags: [String] {
-        Array(Set(session.items.flatMap(\.tags))).sorted()
-    }
-
-    var body: some View {
-        List(selection: $selection) {
-            HStack { WorkspaceSwitcher(); Spacer() }
-                .listRowSeparator(.hidden)
-                .selectionDisabled()
-            Section("Vault") {
-                row(.home, "Overview", .dashboard, .secureNote, nil)
-                row(.all, "All items", .inbox, .login, session.items.count)
-                row(.favorites, "Favorites", .starFull, .apiKey, session.items.filter(\.favorite).count)
-                row(.recent, "Recent", .history, .dbCredential, nil)
-            }
-            Section {
-                ForEach(session.categories) { c in
-                    Label {
-                        HStack { Text(c.name).lineLimit(1); Spacer(); count(session.items.filter { $0.categoryID == c.id }.count) }
-                    } icon: { CategoryTile(category: c) }
-                    .tag(SidebarSelection.category(c.id))
-                    .contextMenu {
-                        Button("Edit category…") { onCategory(.init(existing: c)) }
-                        Button(sync.isSynced(category: c.id) ? "Stop syncing on this Mac" : "Sync on this Mac") {
-                            sync.setSynced(category: c.id, !sync.isSynced(category: c.id))
-                        }
-                        Divider()
-                        Button("Delete category…", role: .destructive) { onCategory(.init(existing: c)) }
-                    }
-                }
-            } header: {
-                HStack {
-                    Text("Categories")
-                    Spacer()
-                    Button { onCategory(.init(existing: nil)) } label: { Icon(.add, size: 11) }
-                        .buttonStyle(.plain).pointerStyle(.link).help("New category").accessibilityLabel("New category")
-                }
-            }
-            Section("Types") {
-                ForEach(ItemType.userTypes) { t in
-                    let n = session.items.filter { $0.type == t }.count
-                    Label {
-                        HStack { Text(t.displayName); Spacer(); count(n) }
-                    } icon: { IconTile(type: t, size: 18) }
-                    .tag(SidebarSelection.type(t))
-                }
-            }
-            if !tags.isEmpty {
-                Section("Tags") {
-                    ForEach(tags, id: \.self) { tag in
-                        Label { Text(tag) } icon: { Icon(.tag, size: 14).foregroundStyle(.secondary) }
-                            .tag(SidebarSelection.tag(tag))
-                    }
-                }
-            }
-        }
-        .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(AppIdentity.name).font(.system(size: 12, weight: .semibold))
-                    HStack(spacing: 5) {
-                        Circle().fill(syncColor).frame(width: 6, height: 6)
-                        Text(syncText).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    .help(syncHelp)
-                }
-                Spacer()
-                SettingsLink { Icon(.settingsGear, size: 14) }
-                    .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 28))
-                    .help("Settings")
-                    .accessibilityLabel("Settings")
-            }
-            .padding(12)
-        }
-        .navigationSplitViewColumnWidth(min: 200, ideal: 220)
-    }
-
-    private var syncColor: Color {
-        switch sync.status {
-        case .off: return .gray.opacity(0.5)
-        case .idle: return .green
-        case .syncing: return .blue
-        case .error: return .red
-        }
-    }
-
-    private var syncText: String {
-        switch sync.status {
-        case .off: return session.touchIDEnabled ? "Touch ID on · no sync" : "No sync"
-        case .idle:
-            if let d = sync.lastSyncAt { return "Synced " + d.formatted(.relative(presentation: .named)) }
-            return "Sync ready"
-        case .syncing: return "Syncing…"
-        case .error: return "Sync error"
-        }
-    }
-
-    private var syncHelp: String {
-        if case .error(let m) = sync.status { return m }
-        return sync.config.displayName
-    }
-
-    private func row(_ sel: SidebarSelection, _ title: String, _ icon: Codicon, _ tint: ItemType, _ n: Int?) -> some View {
-        Label {
-            HStack { Text(title); Spacer(); if let n { count(n) } }
-        } icon: {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(Theme.accent(tint))
-                .frame(width: 18, height: 18)
-                .overlay(Icon(icon, size: 11).foregroundStyle(.white))
-        }
-        .tag(sel)
-    }
-
-    private func count(_ n: Int) -> some View {
-        Text("\(n)").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
     }
 }
 

@@ -15,6 +15,7 @@ terminal trash unlock verified-filled warning
 git-merge server cloud cloud-upload briefcase home heart bookmark rocket flame law mail comment
 device-mobile credit-card gift book beaker organization layers arrow-down arrow-up debug-restart
 tools library game mortar-board lightbulb coffee package ellipsis diff-added arrow-right
+clippy file-media sign-out question
 """.split()
 
 root = pathlib.Path(__file__).resolve().parent.parent
@@ -34,7 +35,7 @@ lines = [
     "",
     "enum Codicon: UInt32, CaseIterable, Sendable {",
 ]
-for n in sorted(USED):
+for n in sorted(set(USED)):
     lines.append(f"    case {case_name(n)} = 0x{table[n]}")
 lines += ["", "    /// The glyph in the `codicon` font.", "    var character: Character { Character(UnicodeScalar(rawValue)!) }", "}", ""]
 (root / "Sources/Vault/UI/Codicon.swift").write_text("\n".join(lines))

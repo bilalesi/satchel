@@ -108,7 +108,7 @@ struct ItemDetailView: View {
         return rows
     }
 
-    private static let seedInfo = "The secret key behind your one-time codes (two-factor login). Satchel uses it to generate the 6-digit code shown above every 30 seconds. Anyone who has this key can generate your codes, so keep it hidden."
+    private static let seedInfo = AuthenticatorHelp.stored
 
     /// Fixed mask length: the dots never reveal how long a secret is.
     private static let mask = String(repeating: "•", count: 12)

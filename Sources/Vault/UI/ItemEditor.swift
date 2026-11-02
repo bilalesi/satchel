@@ -35,6 +35,12 @@ struct ItemEditor: View {
         _syncChoice = State(initialValue: syncChoice)
     }
 
+    /// Sized to the fields of the type, but never taller than the window it slides out of.
+    private var editorHeight: CGFloat {
+        min(560 + (type == .login ? 150 : 0) + (sync.isConfigured ? 36 : 0),
+            (NSApp.windows.first { $0.isVisible && $0.title == AppIdentity.name }?.frame.height ?? 680) - 56)
+    }
+
     var runningApps: [(id: String, name: String)] {
         NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular }
@@ -81,7 +87,15 @@ struct ItemEditor: View {
                 }
                 Section("Secrets") {
                     ForEach(type.fieldKeys, id: \.self) { key in
-                        secretField(key)
+                        if key == "totpSeed" {
+                            AuthenticatorKeyField(text: Binding(get: { fields[key] ?? "" }, set: { fields[key] = $0 })) { label in
+                                // A QR code names the service and the login: fill what is still empty.
+                                if title.trimmingCharacters(in: .whitespaces).isEmpty, let issuer = label?.issuer { title = issuer }
+                                if username.isEmpty, let account = label?.account { username = account }
+                            }
+                        } else {
+                            secretField(key)
+                        }
                     }
                 }
                 Section("Apps") {
@@ -111,7 +125,7 @@ struct ItemEditor: View {
             }
             .padding(Theme.Space.l)
         }
-        .frame(width: 520, height: sync.isConfigured ? 620 : 590)
+        .frame(width: 520, height: editorHeight)
         .excludedFromCapture()
     }
 

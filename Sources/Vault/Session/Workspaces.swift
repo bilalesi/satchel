@@ -8,8 +8,12 @@ struct Workspace: Codable, Identifiable, Equatable {
     let id: UUID
     var name: String
     var path: String
+    /// Look of the workspace tile. Optional so lists saved before they existed still load.
+    var iconName: String?
+    var colorName: String?
 
     var url: URL { URL(fileURLWithPath: path, isDirectory: true) }
+    var look: (icon: String, color: String) { (iconName ?? "layers", colorName ?? "blue") }
 }
 
 enum WorkspaceStore {
@@ -21,7 +25,7 @@ enum WorkspaceStore {
         let d = UserDefaults.standard
         var list = d.data(forKey: listKey).flatMap { try? JSONDecoder().decode([Workspace].self, from: $0) } ?? []
         if list.isEmpty {
-            list = [Workspace(id: UUID(), name: "Personal", path: AppSettings.vaultURL.path)]
+            list = [Workspace(id: UUID(), name: "Personal", path: AppSettings.vaultURL.path, iconName: "home", colorName: "blue")]
         }
         let active = d.string(forKey: activeKey).flatMap(UUID.init(uuidString:)).flatMap { id in list.contains { $0.id == id } ? id : nil } ?? list[0].id
         save(list, active: active)

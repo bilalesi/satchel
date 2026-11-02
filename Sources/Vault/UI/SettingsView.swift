@@ -51,7 +51,6 @@ struct GeneralSettings: View {
     @AppStorage(AppSettings.autoLockMinutesKey) private var autoLock = 10
     @AppStorage(AppSettings.clipboardSecondsKey) private var clipboard = 30
     @AppStorage(AppSettings.hotKeyEnabledKey) private var hotKey = true
-    @AppStorage(HotKey.presetKey) private var hotKeyPreset = HotKey.Preset.optionSpace.rawValue
     @ObservedObject private var hotKeyState = HotKey.shared
     @AppStorage(AppSettings.autoTypeEnabledKey) private var autoType = false
     @State private var axTrusted = AutoType.isTrusted
@@ -90,12 +89,9 @@ struct GeneralSettings: View {
                 Toggle("Open from anywhere with a shortcut", isOn: $hotKey)
                     .onChange(of: hotKey) { _, on in HotKey.shared.setEnabled(on) }
                 if hotKey {
-                    LabeledContent("Shortcut") {
-                        Dropdown(selection: $hotKeyPreset, options: HotKey.Preset.allCases.map { .init(value: $0.rawValue, title: $0.title) }, minWidth: 150)
-                            .onChange(of: hotKeyPreset) { _, _ in HotKey.shared.setEnabled(true) }
-                    }
+                    LabeledContent("Shortcut") { ShortcutRecorder(hotKey: hotKeyState) }
                     if hotKeyState.conflict {
-                        Label { Text("Another app already uses this shortcut. Pick a different one.") } icon: { Icon(.warning, size: 13) }
+                        Label { Text("Another app already uses this shortcut. Record a different one.") } icon: { Icon(.warning, size: 13) }
                             .font(.callout).foregroundStyle(.orange)
                     }
                 }
@@ -133,10 +129,11 @@ struct SecuritySettings: View {
     @State private var oldPassword = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
+    @State private var showPasswords = false
     @State private var message: String?
 
     var body: some View {
-        SettingsPage(height: 450) {
+        SettingsPage(height: 540) {
             Section("Touch ID") { touchID }
             Section("Master password") { passwordChange }
             Section("Privacy") {
@@ -188,9 +185,9 @@ struct SecuritySettings: View {
     @ViewBuilder
     private var passwordChange: some View {
         if session.state == .unlocked {
-            SecureField("Current password", text: $oldPassword)
-            SecureField("New password", text: $newPassword)
-            SecureField("Confirm new password", text: $confirmPassword)
+            LabeledContent("Current password") { PasswordInput(title: "Required", text: $oldPassword, revealed: $showPasswords, alignment: .trailing) }
+            LabeledContent("New password") { PasswordInput(title: "Choose a new one", text: $newPassword, revealed: $showPasswords, alignment: .trailing) }
+            LabeledContent("Confirm") { PasswordInput(title: "Same again", text: $confirmPassword, revealed: $showPasswords, alignment: .trailing) }
             LabeledContent {
                 PillButton("Change password", icon: .key, kind: .primary, compact: true) {
                     Task {

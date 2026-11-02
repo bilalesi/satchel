@@ -57,7 +57,7 @@ enum Theme {
         switch field {
         case "password": return "Password"
         case "apiKey": return "API key"
-        case "totpSeed": return "One-time code seed"
+        case "totpSeed": return "Authenticator key"
         case "connectionString": return "Connection string"
         case "privateKey": return "Private key"
         case "publicKey": return "Public key"

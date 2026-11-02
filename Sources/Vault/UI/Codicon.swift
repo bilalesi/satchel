@@ -16,6 +16,7 @@ enum Codicon: UInt32, CaseIterable, Sendable {
     case chevronDown = 0xEAB4
     case chevronRight = 0xEAB6
     case circleSlash = 0xEABD
+    case clippy = 0xEAC0
     case close = 0xEA76
     case cloud = 0xEBAA
     case cloudDownload = 0xEAC2
@@ -35,6 +36,7 @@ enum Codicon: UInt32, CaseIterable, Sendable {
     case extensions = 0xEAE6
     case eye = 0xEA70
     case eyeClosed = 0xEAE7
+    case fileMedia = 0xEAEA
     case flame = 0xEAF2
     case folder = 0xEA83
     case folderOpened = 0xEAF7
@@ -64,6 +66,7 @@ enum Codicon: UInt32, CaseIterable, Sendable {
     case passFilled = 0xEBB3
     case plug = 0xEB2D
     case pulse = 0xEB31
+    case question = 0xEB32
     case radioTower = 0xEB34
     case record = 0xEBA7
     case refresh = 0xEB37

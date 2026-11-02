@@ -37,6 +37,28 @@ public struct TOTP: Equatable, Sendable {
         self.init(secret: secret)
     }
 
+    /// Who an `otpauth://` link is for: the service (`issuer`) and the login (`account`). Both are
+    /// optional; the label is `Issuer:account` or just `account`, and an `issuer=` query item wins.
+    public struct Label: Equatable, Sendable {
+        public var issuer: String?
+        public var account: String?
+    }
+
+    public static func label(of text: String) -> Label? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.lowercased().hasPrefix("otpauth://"), let comps = URLComponents(string: trimmed) else { return nil }
+        var path = comps.percentEncodedPath
+        if path.hasPrefix("/") { path.removeFirst() }
+        let decoded = path.removingPercentEncoding ?? path
+        var issuer: String?, account: String? = decoded.isEmpty ? nil : decoded
+        if let colon = decoded.firstIndex(of: ":") {
+            issuer = String(decoded[..<colon]).trimmingCharacters(in: .whitespaces)
+            account = String(decoded[decoded.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        }
+        if let q = comps.queryItems?.first(where: { $0.name.lowercased() == "issuer" })?.value, !q.isEmpty { issuer = q }
+        return Label(issuer: issuer?.isEmpty == true ? nil : issuer, account: account?.isEmpty == true ? nil : account)
+    }
+
     public func code(at date: Date = Date()) -> String {
         let counter = UInt64(max(0, date.timeIntervalSince1970)) / UInt64(period)
         var be = counter.bigEndian

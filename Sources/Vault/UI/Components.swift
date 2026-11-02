@@ -195,6 +195,42 @@ struct IconButton: View {
     }
 }
 
+// MARK: - Password input
+
+/// A password field with an eye that shows what was typed, so a new master password can be
+/// checked before it becomes the only key to the vault. `revealed` is shared by the fields of one
+/// form, so one eye reveals or hides them together.
+struct PasswordInput: View {
+    let title: String
+    @Binding var text: String
+    @Binding var revealed: Bool
+    var autofocus = false
+    /// Right-aligned inside forms, where every other value sits at the right edge.
+    var alignment: TextAlignment = .leading
+    var onSubmit: () -> Void = {}
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: Theme.Space.s) {
+            Group {
+                if revealed { TextField("", text: $text, prompt: Text(title)) } else { SecureField("", text: $text, prompt: Text(title)) }
+            }
+            .labelsHidden()
+            .multilineTextAlignment(alignment)
+            .textFieldStyle(.plain)
+            .focused($focused)
+            .onSubmit(onSubmit)
+            IconButton(revealed ? .eyeClosed : .eye, help: revealed ? "Hide password" : "Show password", diameter: 24) {
+                let hadFocus = focused
+                revealed.toggle()
+                // The field is replaced by the other kind; keep the caret where the user was typing.
+                if hadFocus { DispatchQueue.main.async { focused = true } }
+            }
+        }
+        .onAppear { if autofocus { focused = true } }
+    }
+}
+
 // MARK: - Segmented control
 
 struct CapsuleSegmented<Value: Hashable>: View {
@@ -302,11 +338,34 @@ final class MenuPanelController {
         present(host, size: size, anchorRect: anchorRect, window: window, xOffset: -12)
     }
 
-    private func present(_ host: NSView, size: NSSize, anchorRect: NSRect, window: NSWindow, xOffset: CGFloat) {
-        var origin = NSPoint(x: anchorRect.minX + xOffset, y: anchorRect.minY - size.height - 4)
+    enum Placement { case below, above, trailing }
+
+    /// Any SwiftUI content in the same floating card as the menus (the main menu, the icon and
+    /// colour picker). `content` gets a closure that closes the card. The card keeps the app's
+    /// environment only through what the caller passes in: it lives in its own window.
+    func showContent<Content: View>(anchor: NSView, placement: Placement = .below,
+                                    @ViewBuilder content: (_ close: @escaping () -> Void) -> Content) {
+        close()
+        guard let window = anchor.window else { return }
+        let anchorRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        let body = content { [weak self] in self?.close() }
+        let host = NSHostingView(rootView: PanelSurface { body })
+        let size = host.fittingSize
+        present(host, size: size, anchorRect: anchorRect, window: window, xOffset: 0, placement: placement)
+    }
+
+    private func present(_ host: NSView, size: NSSize, anchorRect: NSRect, window: NSWindow, xOffset: CGFloat,
+                         placement: Placement = .below) {
+        var origin: NSPoint
+        switch placement {
+        case .below: origin = NSPoint(x: anchorRect.minX + xOffset, y: anchorRect.minY - size.height - 4)
+        case .above: origin = NSPoint(x: anchorRect.minX + xOffset, y: anchorRect.maxY + 4)
+        case .trailing: origin = NSPoint(x: anchorRect.maxX + 8, y: anchorRect.maxY - size.height)
+        }
         if let screen = window.screen ?? NSScreen.main {
             let visible = screen.visibleFrame
-            if origin.y < visible.minY { origin.y = anchorRect.maxY + 4 } // flip above when no room below
+            if placement == .below, origin.y < visible.minY { origin.y = anchorRect.maxY + 4 } // flip above when no room below
+            origin.y = min(max(origin.y, visible.minY + 4), visible.maxY - size.height - 4)
             origin.x = min(max(origin.x, visible.minX + 4), visible.maxX - size.width - 4)
         }
         let p = MenuPanel(contentRect: NSRect(origin: origin, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -340,6 +399,17 @@ final class MenuPanel: NSPanel {
         onDismiss?()
     }
     override func cancelOperation(_ sender: Any?) { onDismiss?() }
+}
+
+/// The look every floating card shares: material, hairline, 12-pt corners.
+struct PanelSurface<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        content
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.hairline))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+    }
 }
 
 private struct MenuList: View {

@@ -299,6 +299,7 @@ struct ConnectVaultView: View {
         return d
     }()
     @State private var password = ""
+    @State private var showPassword = false
     @State private var message: String?
 
     var body: some View {
@@ -308,7 +309,7 @@ struct ConnectVaultView: View {
             Form {
                 Section("Where is it?") { RemoteDraftFields(draft: $draft, allowOff: false) }
                 Section("Unlock") {
-                    SecureField("Master password of that vault", text: $password)
+                    LabeledContent("Master password") { PasswordInput(title: "Of that vault", text: $password, revealed: $showPassword, alignment: .trailing) }
                     Text("Touch ID is set up per Mac; enable it again here afterwards.").font(.callout).foregroundStyle(.secondary)
                 }
                 if let message { Text(message).foregroundStyle(.red) }

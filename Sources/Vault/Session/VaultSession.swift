@@ -14,6 +14,8 @@ final class VaultSession: ObservableObject {
     /// Secrets only. Categories are kept apart in `categories`.
     @Published private(set) var items: [ItemOverview] = []
     @Published private(set) var categories: [CategoryInfo] = []
+    /// Set by "New → Category"; the sidebar answers by opening its name row and clears it.
+    @Published var newCategoryRequested = false
     @Published private(set) var corruptIDs: [UUID] = []
     @Published private(set) var touchIDEnabled = false
     @Published var lastError: String?
@@ -105,19 +107,23 @@ final class VaultSession: ObservableObject {
     /// Registers an empty workspace and switches to it; the lock screen then offers to create
     /// or connect its vault.
     @discardableResult
-    func addWorkspace(named name: String) -> Workspace {
-        let ws = Workspace(id: UUID(), name: name.trimmingCharacters(in: .whitespaces), path: WorkspaceStore.newPath())
+    func addWorkspace(named name: String, iconName: String, colorName: String) -> Workspace? {
+        guard !busy else { return nil }
+        let ws = Workspace(id: UUID(), name: name.trimmingCharacters(in: .whitespaces), path: WorkspaceStore.newPath(),
+                           iconName: iconName, colorName: colorName)
         workspaces.append(ws)
         WorkspaceStore.save(workspaces, active: activeWorkspaceID)
         switchWorkspace(ws.id)
         return ws
     }
 
-    func renameWorkspace(_ id: UUID, to name: String) {
+    func updateWorkspace(_ id: UUID, name: String, iconName: String, colorName: String) {
         guard let i = workspaces.firstIndex(where: { $0.id == id }) else { return }
         let clean = name.trimmingCharacters(in: .whitespaces)
         guard !clean.isEmpty else { return }
         workspaces[i].name = clean
+        workspaces[i].iconName = iconName
+        workspaces[i].colorName = colorName
         WorkspaceStore.save(workspaces, active: activeWorkspaceID)
     }
 

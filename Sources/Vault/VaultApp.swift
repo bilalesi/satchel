@@ -35,7 +35,7 @@ struct VaultApp: App {
         }
 
         MenuBarExtra {
-            Button("Quick Access  \(HotKey.preset.title)") { QuickAccessController.shared.toggle() }
+            Button("Quick Access  \(HotKey.shared.label)") { QuickAccessController.shared.toggle() }
             Button(session.state == .unlocked ? "Lock now" : "Locked") { session.lock() }
                 .disabled(session.state != .unlocked)
             if case .available(let o) = updates.state {
