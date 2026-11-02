@@ -36,6 +36,8 @@ struct MainWindow: View {
         .frame(minWidth: Responsive.minWindowWidth, minHeight: 480)
         .excludedFromCapture()
         .onChange(of: session.state) { _, s in if s != .unlocked { selectedItem = nil } }
+        // Choosing Overview shows the overview, not the item that was open.
+        .onChange(of: selection) { _, now in if now == .home { selectedItem = nil } }
         .onAppear { if shouldPlayWelcome { startWelcome() } }
         .onChange(of: session.welcomeRequested) { _, requested in
             if requested { session.welcomeRequested = false; startWelcome() }
@@ -195,24 +197,30 @@ struct ItemList: View {
         let list = items
         VStack(spacing: 0) {
             header(count: list.count)
-            List(selection: $selectedItem) {
-                ForEach(list) { item in
-                    ItemRow(item: item)
-                        .tag(item.id)
-                        .contextMenu {
-                            Button("Copy \(Theme.label(item.type.primarySecretField))") { session.copyField(item.type.primarySecretField, of: item.id) }
-                            if let u = item.username { Button("Copy username") { session.copy(u) } }
-                            if item.type == .login { Button("Copy one-time code") { session.copyField("totp", of: item.id) } }
-                            Divider()
-                            Button(item.favorite ? "Remove from favorites" : "Add to favorites") { toggleFavorite(item) }
-                        }
+            ScrollViewReader { proxy in
+                List(selection: $selectedItem) {
+                    ForEach(list) { item in
+                        ItemRow(item: item)
+                            .tag(item.id)
+                            .contextMenu {
+                                Button("Copy \(Theme.label(item.type.primarySecretField))") { session.copyField(item.type.primarySecretField, of: item.id) }
+                                if let u = item.username { Button("Copy username") { session.copy(u) } }
+                                if item.type == .login { Button("Copy one-time code") { session.copyField("totp", of: item.id) } }
+                                Divider()
+                                Button(item.favorite ? "Remove from favorites" : "Add to favorites") { toggleFavorite(item) }
+                            }
+                    }
                 }
-            }
-            .listStyle(.inset)
-            .scrollContentBackground(.hidden)
-            .overlay {
-                if list.isEmpty {
-                    EmptyState(icon: query.isEmpty ? .inbox : .search, title: query.isEmpty ? "No items yet" : "No matches")
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                // A different list (another category or type) starts at the top: the list is a new one, not the old one
+                // scrolled. New search results start at the top too.
+                .id(filter)
+                .onChange(of: query) { _, _ in if let first = list.first { proxy.scrollTo(first.id, anchor: .top) } }
+                .overlay {
+                    if list.isEmpty {
+                        EmptyState(icon: query.isEmpty ? .inbox : .search, title: query.isEmpty ? "No items yet" : "No matches")
+                    }
                 }
             }
         }

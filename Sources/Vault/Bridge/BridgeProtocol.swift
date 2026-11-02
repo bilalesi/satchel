@@ -64,7 +64,10 @@ enum BrowserIntegration {
         Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/" + AppIdentity.hostExecutableName)
     }
 
+    /// The folder to load the extension from: the stable copy in Satchel's data folder (see `ExtensionFiles`),
+    /// or the app's own while that copy does not exist yet.
     static var extensionDistURL: URL? {
-        Bundle.main.resourceURL?.appendingPathComponent("extension", isDirectory: true)
+        if FileManager.default.fileExists(atPath: ExtensionFiles.stableURL.path) { return ExtensionFiles.stableURL }
+        return Bundle.main.resourceURL?.appendingPathComponent("extension", isDirectory: true)
     }
 }

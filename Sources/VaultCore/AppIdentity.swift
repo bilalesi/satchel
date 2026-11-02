@@ -18,6 +18,17 @@ public enum AppIdentity {
         return applicationSupport.appendingPathComponent(name, isDirectory: true)
     }
 
+    /// True for a throwaway debug copy that runs on its own data folder. Such a copy must not touch anything
+    /// outside that folder: the browsers' connection files point at the real app, and a test copy that rewrote
+    /// them would cut the real app's browser extension off.
+    public static var isIsolatedCopy: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SATCHEL_SUPPORT_DIR"] != nil
+        #else
+        return false
+        #endif
+    }
+
     static var applicationSupport: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     }

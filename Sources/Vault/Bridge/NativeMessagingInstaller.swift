@@ -25,6 +25,10 @@ enum NativeMessagingInstaller {
         var isChromium: Bool { self != .firefox }
 
         var manifestDirectory: URL {
+            // An isolated test copy writes its connection files inside its own folder, never into the browsers'.
+            if AppIdentity.isIsolatedCopy {
+                return AppIdentity.supportDirectory.appendingPathComponent("NativeMessagingHosts/\(rawValue)", isDirectory: true)
+            }
             let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             switch self {
             case .dia: return support.appendingPathComponent("Dia/User Data/NativeMessagingHosts")

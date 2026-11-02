@@ -111,7 +111,7 @@ struct BrowserSettings: View {
         if let dist = BrowserIntegration.extensionDistURL, FileManager.default.fileExists(atPath: dist.path) {
             folderRow("Dia, Arc, Chrome", dist.appendingPathComponent("chromium", isDirectory: true))
             folderRow("Firefox", dist.appendingPathComponent("firefox", isDirectory: true))
-            Text("Extensions page → Developer mode → Load unpacked → ⌘⇧G and paste the path. Firefox: about:debugging → Load Temporary Add-on → manifest.json.")
+            Text("Extensions page → Developer mode → Load unpacked → ⌘⇧G and paste the path. Firefox: about:debugging → Load Temporary Add-on → manifest.json. If the browser already lists Satchel from another folder, remove it first: this folder never moves, so the extension keeps working after updates.")
                 .font(.callout).foregroundStyle(.secondary)
         } else {
             Text("Extension files are not inside this build. Run scripts/bundle.sh.").font(.callout).foregroundStyle(.secondary)

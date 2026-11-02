@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let handler = BridgeHandler(session: session)
         Self.bridge = try? BridgeServer { req in await handler.handle(req) }
         NativeMessagingInstaller.refreshStalePaths()
+        ExtensionFiles.refresh()
         HotKey.shared.onPress = { QuickAccessController.shared.toggle() }
         HotKey.shared.setEnabled(UserDefaults.standard.bool(forKey: AppSettings.hotKeyEnabledKey))
         // Every window of this app stays out of screen capture, including ones created later.
