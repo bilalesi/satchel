@@ -40,6 +40,14 @@ public final class FolderStore: RemoteStore {
         return GitBlob.sha(data)
     }
 
+    public func delete(_ path: String, ifMatch: String?) async throws {
+        let current = try await get(path)
+        guard let current else { return }
+        if let ifMatch, current.etag != ifMatch { throw SyncError.conflict(path) }
+        do { try FileManager.default.removeItem(at: url(path)) }
+        catch { throw SyncError.network(error.localizedDescription) }
+    }
+
     public func list(prefix: String) async throws -> [String: String] {
         let dir = url(prefix)
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return [:] }

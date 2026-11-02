@@ -9,6 +9,7 @@ final class InMemoryRemoteStore: RemoteStore, @unchecked Sendable {
     private(set) var gets: [String] = []
     private(set) var puts: [String] = []
     private(set) var lists = 0
+    private(set) var deletes: [String] = []
     /// Paths whose next put fails with `.conflict` once, without applying.
     var conflictOnce: Set<String> = []
     /// After this many successful puts, every put throws `.network`.
@@ -17,6 +18,16 @@ final class InMemoryRemoteStore: RemoteStore, @unchecked Sendable {
     func get(_ path: String) async throws -> RemoteObject? { syncGet(path) }
     func put(_ path: String, data: Data, ifMatch: String?) async throws -> String { try syncPut(path, data: data, ifMatch: ifMatch) }
     func list(prefix: String) async throws -> [String: String] { syncList(prefix) }
+    func delete(_ path: String, ifMatch: String?) async throws { try syncDelete(path, ifMatch: ifMatch) }
+
+    private func syncDelete(_ path: String, ifMatch: String?) throws {
+        try lock.withLock {
+            guard let data = objects[path] else { return }
+            if let ifMatch, GitBlob.sha(data) != ifMatch { throw SyncError.conflict(path) }
+            objects[path] = nil
+            deletes.append(path)
+        }
+    }
 
     private func syncGet(_ path: String) -> RemoteObject? {
         lock.withLock {
@@ -54,6 +65,6 @@ final class InMemoryRemoteStore: RemoteStore, @unchecked Sendable {
 
     func resetCounters() {
         lock.lock(); defer { lock.unlock() }
-        gets = []; puts = []; lists = 0
+        gets = []; puts = []; lists = 0; deletes = []
     }
 }

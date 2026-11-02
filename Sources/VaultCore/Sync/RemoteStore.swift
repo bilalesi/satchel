@@ -2,8 +2,9 @@ import Foundation
 
 public struct RemoteObject: Sendable, Equatable {
     public let data: Data
-    /// Opaque validator for compare-and-swap. Every backend uses the git blob id of the
-    /// content so the engine can compare local bytes to the remote without downloading.
+    /// Opaque validator for compare-and-swap. Backends return whatever the server uses (a git
+    /// blob id, an S3 ETag, a WebDAV ETag); the engine only ever echoes it back and records
+    /// it in `SyncState.objects`.
     public let etag: String
 
     public init(data: Data, etag: String) {
@@ -12,8 +13,8 @@ public struct RemoteObject: Sendable, Equatable {
     }
 }
 
-/// The whole contract a sync backend must fulfil. Strategy pattern: GitHub, a folder,
-/// later S3, all plug in here.
+/// The whole contract a sync backend must fulfil. Strategy pattern: GitHub, a folder, Git over
+/// SSH, WebDAV and S3-compatible storage all plug in here.
 public protocol RemoteStore: Sendable {
     var displayName: String { get }
     /// `nil` when the object does not exist.
@@ -23,6 +24,53 @@ public protocol RemoteStore: Sendable {
     func put(_ path: String, data: Data, ifMatch: String?) async throws -> String
     /// Objects under `prefix` → etag. `prefix` ends with "/".
     func list(prefix: String) async throws -> [String: String]
+    /// Removes an object. A missing object is not an error. `ifMatch == nil` deletes whatever is there.
+    func delete(_ path: String, ifMatch: String?) async throws
+}
+
+/// A backend that can stage several writes and publish them together (Git: one commit and one
+/// push per sync round instead of one per file). Reads inside `withBatch` see staged writes.
+/// If publishing fails because the remote moved, `withBatch` throws `SyncError.conflict` and
+/// nothing is published.
+public protocol BatchingRemoteStore: RemoteStore {
+    func withBatch<T: Sendable>(_ body: @Sendable () async throws -> T) async throws -> T
+}
+
+public enum ProbeResult: Equatable, Sendable {
+    case enforced
+    /// The server accepted a write that should have been refused (named for the message).
+    case notEnforced(String)
+}
+
+public extension RemoteStore {
+    /// Proves the server really enforces conditional writes, which the sync engine relies on to
+    /// avoid lost updates. Writes, overwrites and removes one scratch object under `items/`
+    /// (a name that is not an item id, so it is ignored by sync).
+    func probeConditionalWrites() async throws -> ProbeResult {
+        let path = RemotePaths.itemsPrefix + ".probe-" + UUID().uuidString.lowercased()
+        do {
+            let first = try await put(path, data: Data("a".utf8), ifMatch: nil)
+
+            func refused(_ body: () async throws -> String) async throws -> Bool {
+                do { _ = try await body(); return false } catch SyncError.conflict { return true }
+            }
+            if !(try await refused({ try await put(path, data: Data("b".utf8), ifMatch: nil) })) {
+                try? await delete(path, ifMatch: nil)
+                return .notEnforced("create-only overwrote an existing object")
+            }
+            if !(try await refused({ try await put(path, data: Data("c".utf8), ifMatch: "satchel-wrong-etag") })) {
+                try? await delete(path, ifMatch: nil)
+                return .notEnforced("a write with a wrong ETag was accepted")
+            }
+            // A correct etag must still be accepted (otherwise every real write would fail).
+            _ = try await put(path, data: Data("d".utf8), ifMatch: first)
+            try? await delete(path, ifMatch: nil)
+            return .enforced
+        } catch {
+            try? await delete(path, ifMatch: nil)
+            throw error
+        }
+    }
 }
 
 public enum SyncError: Error, Equatable, LocalizedError {

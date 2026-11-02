@@ -2,8 +2,14 @@ import Foundation
 
 public enum ItemType: String, Codable, CaseIterable, Sendable, Identifiable {
     case login, apiKey, dbCredential, webhook, secureNote, sshKey
+    /// A user-created grouping, stored as a tiny item so it syncs, merges and versions like
+    /// everything else. Never shown in item lists; the app reads it as a `Category`.
+    case category
 
     public var id: String { rawValue }
+
+    /// The types a user can create items of (everything except the category marker).
+    public static var userTypes: [ItemType] { allCases.filter { $0 != .category } }
 
     public var displayName: String {
         switch self {
@@ -13,6 +19,7 @@ public enum ItemType: String, Codable, CaseIterable, Sendable, Identifiable {
         case .webhook: return "Webhook"
         case .secureNote: return "Secure Note"
         case .sshKey: return "SSH Key"
+        case .category: return "Category"
         }
     }
 
@@ -24,6 +31,7 @@ public enum ItemType: String, Codable, CaseIterable, Sendable, Identifiable {
         case .webhook: return "url"
         case .secureNote: return "notes"
         case .sshKey: return "privateKey"
+        case .category: return "name"
         }
     }
 
@@ -36,6 +44,7 @@ public enum ItemType: String, Codable, CaseIterable, Sendable, Identifiable {
         case .webhook: return ["url", "secret", "notes"]
         case .secureNote: return ["notes"]
         case .sshKey: return ["privateKey", "publicKey", "passphrase", "host", "notes"]
+        case .category: return ["icon", "color"]
         }
     }
 
@@ -54,12 +63,16 @@ public struct ItemOverview: Codable, Equatable, Hashable, Identifiable, Sendable
     public var urls: [String]
     public var bundleIDs: [String]
     public var tags: [String]
+    /// The user category this item belongs to; nil = uncategorized. A category that no
+    /// longer exists is treated as nil by the app.
+    public var categoryID: UUID?
     public var favorite: Bool
     public var createdAt: Date
     public var updatedAt: Date
 
     public init(id: UUID = UUID(), type: ItemType, title: String, username: String? = nil,
                 urls: [String] = [], bundleIDs: [String] = [], tags: [String] = [],
+                categoryID: UUID? = nil,
                 favorite: Bool = false, createdAt: Date = Date(), updatedAt: Date = Date()) {
         self.id = id
         self.type = type
@@ -68,6 +81,7 @@ public struct ItemOverview: Codable, Equatable, Hashable, Identifiable, Sendable
         self.urls = urls
         self.bundleIDs = bundleIDs
         self.tags = tags
+        self.categoryID = categoryID
         self.favorite = favorite
         self.createdAt = createdAt.millisecondPrecision
         self.updatedAt = updatedAt.millisecondPrecision

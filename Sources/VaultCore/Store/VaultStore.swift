@@ -380,6 +380,13 @@ public final class VaultStore: @unchecked Sendable {
         return header
     }
 
+    /// Header and overview of raw item bytes (a local file or a download). Opens only the
+    /// overview box; throws `corruptItemData` / `authenticationFailed` for foreign or damaged bytes.
+    public func overview(of data: Data) throws -> (header: ItemFileHeader, overview: ItemOverview) {
+        mutex.lock(); defer { mutex.unlock() }
+        return try ItemFile.decodeOverview(data, keys: try requireKeys())
+    }
+
     /// Stores verified remote bytes as-is (no re-encryption). Does not touch the manifest.
     public func writeRawItem(_ data: Data) throws {
         mutex.lock(); defer { mutex.unlock() }

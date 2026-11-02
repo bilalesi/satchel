@@ -130,6 +130,27 @@ public final class GitHubStore: RemoteStore {
         return out
     }
 
+    public func delete(_ path: String, ifMatch: String?) async throws {
+        var sha = ifMatch
+        if sha == nil {
+            guard let current = try await get(path) else { return }
+            sha = current.etag
+        }
+        var req = request("DELETE", contentsURL(path, ref: false))
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "message": "vault: remove \(path)", "sha": sha!, "branch": repo.branch,
+        ])
+        let (resp, status) = try await send(req)
+        switch status {
+        case 200: return
+        case 404: return // already gone
+        case 409, 422: throw SyncError.conflict(path)
+        default:
+            try check(status, resp)
+            throw SyncError.remote(status: status, message: message(resp))
+        }
+    }
+
     /// Checks the token can see the repository. Returns its full name.
     public func verify() async throws -> String {
         let url = api.appendingPathComponent("repos/\(repo.owner)/\(repo.name)")

@@ -20,7 +20,7 @@ struct OverviewCards: View {
                 VStack(alignment: .leading, spacing: Theme.Space.m) {
                     SectionLabel(text: "By type")
                     grid(columns: typeColumns) {
-                        ForEach(ItemType.allCases) { typeCard($0) }
+                        ForEach(ItemType.userTypes) { typeCard($0) }
                     }
                 }
             }

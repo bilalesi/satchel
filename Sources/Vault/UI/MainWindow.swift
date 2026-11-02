@@ -30,7 +30,7 @@ struct MainWindow: View {
                     // System toolbar styling: macOS draws one glass capsule per item.
                     ToolbarItem(placement: .primaryAction) {
                         ToolbarMenuButton(title: "New", icon: .add) {
-                            ItemType.allCases.map { t in
+                            ItemType.userTypes.map { t in
                                 MenuItem(title: t.displayName, icon: Theme.icon(t)) { creatingType = t }
                             }
                         }
@@ -99,7 +99,7 @@ struct Sidebar: View {
                 row(.recent, "Recent", .history, .dbCredential, nil)
             }
             Section("Types") {
-                ForEach(ItemType.allCases) { t in
+                ForEach(ItemType.userTypes) { t in
                     let n = session.items.filter { $0.type == t }.count
                     Label {
                         HStack { Text(t.displayName); Spacer(); count(n) }

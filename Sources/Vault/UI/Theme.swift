@@ -37,6 +37,7 @@ enum Theme {
         case .webhook: return Color(red: 0.58, green: 0.38, blue: 0.90)
         case .secureNote: return Color(red: 0.52, green: 0.54, blue: 0.60)
         case .sshKey: return Color(red: 0.12, green: 0.62, blue: 0.68)
+        case .category: return Color(red: 0.52, green: 0.54, blue: 0.60)
         }
     }
 
@@ -48,6 +49,7 @@ enum Theme {
         case .webhook: return .link
         case .secureNote: return .note
         case .sshKey: return .terminal
+        case .category: return .folder
         }
     }
 
