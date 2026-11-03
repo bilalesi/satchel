@@ -53,6 +53,10 @@ fi
 if [ -s Resources/license-public-key.txt ]; then
   /usr/libexec/PlistBuddy -c "Set :SatchelLicensePublicKey $(tr -d '[:space:]' < Resources/license-public-key.txt)" "$APP/Contents/Info.plist"
 fi
+# The sandbox (test card) public key: only to recognise a test key and say why it does not activate.
+if [ -s Resources/license-test-public-key.txt ]; then
+  /usr/libexec/PlistBuddy -c "Add :SatchelLicenseTestPublicKey string $(tr -d '[:space:]' < Resources/license-test-public-key.txt)" "$APP/Contents/Info.plist"
+fi
 # Browser extension (built by extension/build.sh) ships inside the bundle for "Load unpacked".
 if [ -x extension/build.sh ]; then ./extension/build.sh >/dev/null && cp -R extension/dist "$APP/Contents/Resources/extension"; fi
 # Dynamic frameworks produced by dependencies (Clibsodium is static in swift-sodium 0.11; kept for safety).

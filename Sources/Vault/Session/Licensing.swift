@@ -22,6 +22,10 @@ final class Licensing: ObservableObject {
         return Bundle.main.object(forInfoDictionaryKey: "SatchelLicensePublicKey") as? String ?? ""
     }
 
+    /// Public half of the sandbox (test card) signing key, from Resources/license-test-public-key.txt. Only used to
+    /// recognise a test key and explain why it does not activate.
+    var testPublicKey: String { Bundle.main.object(forInfoDictionaryKey: "SatchelLicenseTestPublicKey") as? String ?? "" }
+
     /// A build without a licence key (built from source without one) has nothing to check against: everything is on.
     var isEnforced: Bool { !publicKey.isEmpty }
 
@@ -52,25 +56,31 @@ final class Licensing: ObservableObject {
         return !trial.isOver()
     }
 
-    /// Checks and keeps a pasted key. Returns false for a key that does not verify.
-    func activate(_ text: String) -> Bool {
-        guard let l = License.parse(text, publicKey: publicKey) else { return false }
-        UserDefaults.standard.set(text.filter { !$0.isWhitespace }, forKey: Self.licenseKeyKey)
-        license = l
-        return true
+    /// Checks and keeps a pasted key. Returns nil when it activated, otherwise what to tell the person.
+    func activate(_ text: String) -> String? {
+        switch License.check(text, publicKey: publicKey, testPublicKey: testPublicKey) {
+        case .valid(let l):
+            UserDefaults.standard.set(text.filter { !$0.isWhitespace }, forKey: Self.licenseKeyKey)
+            license = l
+            return nil
+        case .testKey:
+            return "This is a test key, from a purchase with a test card. Only keys from real purchases activate \(AppIdentity.name)."
+        case .invalid:
+            return "This key is not valid. Paste it exactly as you received it."
+        }
     }
 
     /// `satchel://activate?key=…`, from the thank-you page or the purchase email.
     func activate(link url: URL) {
         guard let key = License.key(fromActivationURL: url) else { return }
         AppDelegate.openMainWindow()
-        if activate(key) {
-            NotchHUD.shared.show(title: "Licence activated", detail: "Thank you for buying \(AppIdentity.name)")
-        } else {
+        if let problem = activate(key) {
             let alert = NSAlert()
             alert.messageText = "This licence link did not work"
-            alert.informativeText = "Paste the key from your purchase email into Settings → Licence. If it is still refused, reply to that email."
+            alert.informativeText = problem + " If a key from a real purchase is refused, reply to your purchase email."
             alert.runModal()
+        } else {
+            NotchHUD.shared.show(title: "Licence activated", detail: "Thank you for buying \(AppIdentity.name)")
         }
     }
 

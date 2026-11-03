@@ -69,6 +69,17 @@ public struct License: Equatable, Sendable {
         return License(plan: plan, purchased: day, id: fields[3])
     }
 
+    public enum Check: Equatable { case valid(License), testKey, invalid }
+
+    /// Like `parse`, but tells a test key apart from a bad one. Test keys come from purchases with Paddle's test
+    /// cards (its sandbox) and are signed with a separate key; they never activate a released app, or a test card
+    /// would be a free licence. Recognising one lets the app say so instead of "not valid".
+    public static func check(_ text: String, publicKey: String, testPublicKey: String) -> Check {
+        if let license = parse(text, publicKey: publicKey) { return .valid(license) }
+        if !testPublicKey.isEmpty, parse(text, publicKey: testPublicKey) != nil { return .testKey }
+        return .invalid
+    }
+
     /// Builds the key text from a payload and its signature (used by `scripts/license-key.swift` and tests).
     public static func keyText(payload: String, signature: Data) -> String {
         prefix + base64URLEncode(Data(payload.utf8)) + "." + base64URLEncode(signature)

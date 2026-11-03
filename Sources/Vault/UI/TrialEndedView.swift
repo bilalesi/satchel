@@ -44,12 +44,10 @@ struct TrialEndedView: View {
     }
 
     private func activate() {
-        if licensing.activate(key) {
-            key = ""; error = nil
-            NotchHUD.shared.show(title: "Licence activated", detail: "Thank you for buying \(AppIdentity.name)")
-        } else {
-            error = "This key is not valid. Paste it exactly as you received it."
-        }
+        error = licensing.activate(key)
+        guard error == nil else { return }
+        key = ""
+        NotchHUD.shared.show(title: "Licence activated", detail: "Thank you for buying \(AppIdentity.name)")
     }
 }
 

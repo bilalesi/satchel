@@ -19,6 +19,17 @@ final class LicenseTests: XCTestCase {
         XCTAssertEqual(License.day(l!.updatesUntil), "2027-11-03")
     }
 
+    func testTellsATestKeyApartFromABadOne() {
+        let test = Curve25519.Signing.PrivateKey()
+        let testPublic = test.publicKey.rawRepresentation.base64EncodedString()
+        let real = issue("1|single|2026-11-03|txn_real")
+        let sandbox = issue("1|single|2026-11-03|txn_test", with: test)
+        XCTAssertEqual(License.check(real, publicKey: publicKey, testPublicKey: testPublic), .valid(License.parse(real, publicKey: publicKey)!))
+        XCTAssertEqual(License.check(sandbox, publicKey: publicKey, testPublicKey: testPublic), .testKey)
+        XCTAssertEqual(License.check(sandbox, publicKey: publicKey, testPublicKey: ""), .invalid)
+        XCTAssertEqual(License.check(issue("1|single|2026-11-03|x", with: .init()), publicKey: publicKey, testPublicKey: testPublic), .invalid)
+    }
+
     func testToleratesWhitespaceFromAnEmail() {
         let key = issue("1|single|2026-01-31|a")
         let wrapped = "  " + key.prefix(20) + "\n" + key.dropFirst(20) + "\n"

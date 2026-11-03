@@ -310,8 +310,8 @@ struct LicenseSettings: View {
                         HStack {
                             PillButton("Buy", icon: .linkExternal, compact: true) { NSWorkspace.shared.open(AppIdentity.purchaseURL) }
                             PillButton("Activate", icon: .key, kind: .primary, compact: true) {
-                                if licensing.activate(key) { key = ""; error = nil }
-                                else { error = "This key is not valid. Paste it exactly as you received it." }
+                                error = licensing.activate(key)
+                                if error == nil { key = "" }
                             }
                             .disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
