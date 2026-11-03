@@ -173,6 +173,31 @@ final class S3StoreTests: XCTestCase {
                     secretKey: s3.secret, session: MockHTTPProtocol.session())
     }
 
+    /// A real bucket (AWS S3, Cloudflare R2, MinIO): SATCHEL_S3_TEST_ENDPOINT, _REGION (default "auto"), _BUCKET,
+    /// _ACCESS_KEY and _SECRET. `bun run r2-sync-test` in the website repository makes an R2 one and keeps its key in
+    /// that repository's .env as R2_SYNC_*. Works in a folder of its own inside the bucket and removes what it wrote.
+    func testLiveBucket() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let endpoint = env["SATCHEL_S3_TEST_ENDPOINT"], let bucket = env["SATCHEL_S3_TEST_BUCKET"],
+              let access = env["SATCHEL_S3_TEST_ACCESS_KEY"], let secret = env["SATCHEL_S3_TEST_SECRET"] else { throw XCTSkip("set SATCHEL_S3_TEST_*") }
+        let live = try S3Store(config: S3Config(endpoint: endpoint, region: env["SATCHEL_S3_TEST_REGION"] ?? "auto", bucket: bucket,
+                                                prefix: "test-\(UUID().uuidString)", accessKeyID: access), secretKey: secret)
+        try await live.verify()
+        let probe = try await live.probeConditionalWrites()
+        XCTAssertEqual(probe, .enforced)
+        let e1 = try await live.put("items/a.vitem", data: Data([1]), ifMatch: nil)
+        do { _ = try await live.put("items/a.vitem", data: Data([2]), ifMatch: nil); XCTFail("create-only must conflict") } catch SyncError.conflict {}
+        do { _ = try await live.put("items/a.vitem", data: Data([2]), ifMatch: "\"stale\""); XCTFail("stale write must conflict") } catch SyncError.conflict {}
+        let e2 = try await live.put("items/a.vitem", data: Data([2]), ifMatch: e1)
+        let got = try await live.get("items/a.vitem")
+        XCTAssertEqual(got?.data, Data([2]))
+        let listed = try await live.list(prefix: "items/")
+        XCTAssertEqual(Array(listed.keys), ["items/a.vitem"])
+        try await live.delete("items/a.vitem", ifMatch: e2)
+        let gone = try await live.get("items/a.vitem")
+        XCTAssertNil(gone)
+    }
+
     override func setUpWithError() throws {
         s3 = FakeS3()
         s3.install()

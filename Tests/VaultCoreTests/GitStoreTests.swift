@@ -24,6 +24,31 @@ final class GitStoreTests: XCTestCase {
         return Int(r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
     }
 
+    /// A real server over ssh, with the Mac's own keys and the app's default protocols:
+    /// SATCHEL_GIT_TEST_URL=ssh://git@localhost:2222/srv/git/vault.git (`bun run test-git up` in the website repository).
+    /// Works in a folder of its own inside the repository, and two clones stand in for two Macs.
+    func testLiveServer() async throws {
+        guard let url = ProcessInfo.processInfo.environment["SATCHEL_GIT_TEST_URL"] else { throw XCTSkip("set SATCHEL_GIT_TEST_URL") }
+        let folder = "test-\(UUID().uuidString)"
+        func clone(_ name: String) throws -> GitStore {
+            try GitStore(config: GitConfig(url: url, branch: "main", prefix: folder), cacheRoot: tmp.appendingPathComponent("live-" + name))
+        }
+        let a = try clone("a"), b = try clone("b")
+        try await a.verify()
+        let probe = try await a.probeConditionalWrites()
+        XCTAssertEqual(probe, .enforced)
+        let e1 = try await a.put("items/a.vitem", data: Data("one".utf8), ifMatch: nil)
+        let seen = try await b.get("items/a.vitem")
+        XCTAssertEqual(seen?.data, Data("one".utf8))
+        do { _ = try await b.put("items/a.vitem", data: Data("two".utf8), ifMatch: "stale"); XCTFail("stale write must conflict") } catch SyncError.conflict {}
+        let e2 = try await b.put("items/a.vitem", data: Data("two".utf8), ifMatch: e1)
+        let back = try await a.get("items/a.vitem")
+        XCTAssertEqual(back?.etag, e2)
+        try await a.delete("items/a.vitem", ifMatch: e2)
+        let gone = try await b.get("items/a.vitem")
+        XCTAssertNil(gone)
+    }
+
     func testRoundTripOnAnEmptyRemote() async throws {
         let s = try makeStore("a", prefix: "vault")
         let empty = try await s.get("manifest.vman")
