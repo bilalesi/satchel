@@ -33,6 +33,12 @@ SetFile -a C "$MOUNT"
 sync
 hdiutil detach -quiet "$MOUNT"
 hdiutil convert -quiet "$RW" -format UDZO -imagekey zlib-level=9 -ov -o "$DMG"
+# A Developer ID build signs the disk image too (notarized and stapled afterwards by the release workflow).
+if [ -n "${SIGN_IDENTITY:-}" ]; then
+  SIGN=(codesign --force --timestamp --sign "$SIGN_IDENTITY")
+  [ -n "${SIGN_KEYCHAIN:-}" ] && SIGN+=(--keychain "$SIGN_KEYCHAIN")
+  "${SIGN[@]}" "$DMG"
+fi
 
 ( cd build && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256" )
 

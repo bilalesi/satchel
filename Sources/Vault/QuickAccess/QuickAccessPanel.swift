@@ -48,6 +48,8 @@ final class QuickAccessController {
 
     func show() {
         guard let panel else { return }
+        // After the trial without a licence the main window explains why and offers a key or an export.
+        guard Licensing.shared.allowsUse else { AppDelegate.openMainWindow(); return }
         // Capture before we take key status; the frontmost app is the fill target.
         let front = NSWorkspace.shared.frontmostApplication
         frontmostApp = front?.bundleIdentifier == Bundle.main.bundleIdentifier ? nil : front

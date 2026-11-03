@@ -3,19 +3,15 @@ import CryptoKit
 @testable import VaultCore
 
 final class UpdateFeedTests: XCTestCase {
-    let repo = "me/satchel"
+    let sha = String(repeating: "ab", count: 32)
+    let sig = Data(repeating: 7, count: 64).base64EncodedString()
 
-    func release(tag: String = "v0.2.0", draft: Bool = false, prerelease: Bool = false,
-                 dmgURL: String? = nil, sigURL: String? = nil, size: Int = 12_000_000, dmgName: String? = nil) -> Data {
-        let v = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
-        let base = "https://github.com/\(repo)/releases/download/\(tag)/"
-        let json: [String: Any] = [
-            "tag_name": tag, "draft": draft, "prerelease": prerelease, "body": "notes", "html_url": "https://github.com/\(repo)/releases/tag/\(tag)",
-            "assets": [
-                ["name": dmgName ?? "Satchel-\(v).dmg", "browser_download_url": dmgURL ?? base + "Satchel-\(v).dmg", "size": size],
-                ["name": "Satchel-\(v).dmg.sig", "browser_download_url": sigURL ?? base + "Satchel-\(v).dmg.sig", "size": 90],
-            ],
+    func feed(_ change: (inout [String: Any]) -> Void = { _ in }) -> Data {
+        var json: [String: Any] = [
+            "version": "0.2.0", "url": "https://satchel.echospace.dev/download/Satchel-0.2.0.dmg", "size": 12_000_000,
+            "sha256": sha, "signature": sig, "notes": "notes", "published": "2026-11-03T10:00:00Z",
         ]
+        change(&json)
         return try! JSONSerialization.data(withJSONObject: json)
     }
 
@@ -29,33 +25,53 @@ final class UpdateFeedTests: XCTestCase {
     }
 
     func testOffersANewerRelease() {
-        let offer = UpdateFeed.parse(release(), current: AppVersion("0.1.5")!, repository: repo)
+        let offer = UpdateFeed.parse(feed(), current: AppVersion("0.1.5")!)
         XCTAssertEqual(offer?.version, AppVersion("0.2.0"))
-        XCTAssertEqual(offer?.dmgURL.lastPathComponent, "Satchel-0.2.0.dmg")
-        XCTAssertEqual(offer?.signatureURL.lastPathComponent, "Satchel-0.2.0.dmg.sig")
+        XCTAssertEqual(offer?.dmgURL.absoluteString, "https://satchel.echospace.dev/download/Satchel-0.2.0.dmg")
+        XCTAssertEqual(offer?.size, 12_000_000)
+        XCTAssertEqual(offer?.sha256, sha)
+        XCTAssertEqual(offer?.signature, sig)
+        XCTAssertEqual(offer?.notes, "notes")
+        XCTAssertEqual(offer?.published, ISO8601DateFormatter().date(from: "2026-11-03T10:00:00Z"))
+        // Upper-case digest is accepted and normalised; JavaScript's toISOString() date too.
+        let js = UpdateFeed.parse(feed { $0["sha256"] = self.sha.uppercased(); $0["published"] = "2026-11-03T10:00:00.250Z" }, current: AppVersion("0.1.5")!)
+        XCTAssertEqual(js?.sha256, sha)
+        XCTAssertNotNil(js?.published)
+        // A feed without notes or a date still offers the update.
+        XCTAssertNotNil(UpdateFeed.parse(feed { $0["notes"] = nil; $0["published"] = nil }, current: AppVersion("0.1.5")!))
     }
 
-    func testIgnoresSameOlderDraftAndPrerelease() {
-        let cur = AppVersion("0.2.0")!
-        XCTAssertNil(UpdateFeed.parse(release(), current: cur, repository: repo))
-        XCTAssertNil(UpdateFeed.parse(release(tag: "v0.1.0"), current: cur, repository: repo))
-        XCTAssertNil(UpdateFeed.parse(release(tag: "v0.3.0", draft: true), current: cur, repository: repo))
-        XCTAssertNil(UpdateFeed.parse(release(tag: "v0.3.0", prerelease: true), current: cur, repository: repo))
+    func testIgnoresSameAndOlderVersions() {
+        XCTAssertNil(UpdateFeed.parse(feed(), current: AppVersion("0.2.0")!))
+        XCTAssertNil(UpdateFeed.parse(feed(), current: AppVersion("0.3.0")!))
     }
 
-    func testRejectsAssetsFromOtherHostsOrRepositories() {
+    func testRejectsDownloadsFromAnywhereElse() {
         let cur = AppVersion("0.1.0")!
-        XCTAssertNil(UpdateFeed.parse(release(dmgURL: "https://evil.example.com/Satchel-0.2.0.dmg"), current: cur, repository: repo))
-        XCTAssertNil(UpdateFeed.parse(release(dmgURL: "http://github.com/\(repo)/releases/download/v0.2.0/Satchel-0.2.0.dmg"), current: cur, repository: repo))
-        XCTAssertNil(UpdateFeed.parse(release(dmgURL: "https://github.com/other/repo/releases/download/v0.2.0/Satchel-0.2.0.dmg"), current: cur, repository: repo))
-        XCTAssertNil(UpdateFeed.parse(release(sigURL: "https://evil.example.com/x.sig"), current: cur, repository: repo))
+        for url in ["https://evil.example.com/download/Satchel-0.2.0.dmg",
+                    "http://satchel.echospace.dev/download/Satchel-0.2.0.dmg",
+                    "https://satchel.echospace.dev:8443/download/Satchel-0.2.0.dmg",
+                    "https://satchel.echospace.dev.evil.com/download/Satchel-0.2.0.dmg",
+                    "https://github.com/ekhodev/satchel/releases/download/v0.2.0/Satchel-0.2.0.dmg",
+                    "https://satchel.echospace.dev/download/Satchel-0.9.9.dmg",
+                    "https://satchel.echospace.dev/other/Satchel-0.2.0.dmg",
+                    "http://localhost:8000/Satchel-0.2.0.dmg"] {
+            XCTAssertNil(UpdateFeed.parse(feed { $0["url"] = url }, current: cur), url)
+        }
+        XCTAssertNotNil(UpdateFeed.parse(feed { $0["url"] = "http://localhost:8000/Satchel-0.2.0.dmg" }, current: cur, allowLocal: true))
     }
 
-    func testRejectsMismatchedNamesAndHugeDownloads() {
+    func testRejectsMalformedFeeds() {
         let cur = AppVersion("0.1.0")!
-        XCTAssertNil(UpdateFeed.parse(release(dmgName: "Satchel-0.9.9.dmg"), current: cur, repository: repo))
-        XCTAssertNil(UpdateFeed.parse(release(size: UpdateFeed.maxDownloadBytes + 1), current: cur, repository: repo))
-        XCTAssertNil(UpdateFeed.parse(Data("not json".utf8), current: cur, repository: repo))
+        let broken: [(inout [String: Any]) -> Void] = [
+            { $0["version"] = "latest" }, { $0["version"] = nil }, { $0["url"] = nil },
+            { $0["size"] = 0 }, { $0["size"] = UpdateFeed.maxDownloadBytes + 1 }, { $0["size"] = "12" },
+            { $0["sha256"] = "abc" }, { $0["sha256"] = String(repeating: "zz", count: 32) }, { $0["sha256"] = nil },
+            { $0["signature"] = "not base64!" }, { $0["signature"] = Data(count: 10).base64EncodedString() }, { $0["signature"] = nil },
+        ]
+        for (i, change) in broken.enumerated() { XCTAssertNil(UpdateFeed.parse(feed(change), current: cur), "case \(i)") }
+        XCTAssertNil(UpdateFeed.parse(Data("not json".utf8), current: cur))
+        XCTAssertNil(UpdateFeed.parse(Data("[]".utf8), current: cur))
     }
 
     func testSignatureVerification() throws {

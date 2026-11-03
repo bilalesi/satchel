@@ -44,7 +44,7 @@ const MESSAGES = {
   no_content_script: "Reload the page, then try again.",
   no_tab: "No page to fill.",
   timeout: "Satchel didn’t answer in time.",
-  trial_ended: "Your Satchel trial has ended. Add a licence in Satchel’s Settings to fill again.",
+  trial_ended: "Your Satchel trial has ended. Enter a licence key in Satchel to fill again.",
 };
 // The popup is read from disk when it opens, the background script only when the extension is reloaded:
 // after an update the old background does not know the new messages. Reload once, by ourselves.

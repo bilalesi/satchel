@@ -26,12 +26,21 @@
 	<string>0.1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>SatchelUpdateRepository</key>
-	<string>ekhodev/satchel</string>
 	<key>SatchelUpdatePublicKey</key>
 	<string></string>
 	<key>SatchelLicensePublicKey</key>
 	<string></string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.bilalesi.satchel.activate</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>satchel</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>LSApplicationCategoryType</key>

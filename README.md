@@ -6,15 +6,12 @@ Requires macOS 15 or newer, Apple silicon or Intel.
 
 ## Install
 
-1. Download `Satchel-<version>.dmg` from the **Releases** page, open it and drag **Satchel** onto **Applications**. Eject the disk image and open Satchel from Applications.
-2. The first launch is blocked by macOS, because Satchel is signed ad hoc and not notarized (notarization needs a paid Apple Developer account). Open **System Settings → Privacy & Security**, scroll down to the message about Satchel and click **Open Anyway**. Or run once in Terminal:
+1. Download Satchel from [satchel.echospace.dev](https://satchel.echospace.dev), open the disk image and drag **Satchel** onto **Applications**. Eject the disk image and open Satchel from Applications.
+2. Try it free for 7 days, or buy a licence straight away. The link in your purchase email (`satchel://activate?key=…`) opens Satchel and activates the key; you can also paste the key into **Settings → Licence**.
 
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Satchel.app
-   ```
-3. Optional: check the download with `shasum -a 256 -c Satchel-<version>.dmg.sha256`.
+Releases are signed with Apple's Developer ID and notarized, so macOS opens them without a warning. (Until the Apple signing is set up, a build is signed ad hoc: then open **System Settings → Privacy & Security** and click **Open Anyway** on the first launch.)
 
-Satchel then offers new versions itself: a blue circle appears in the window when one is out. It downloads the update, checks its signature against a key built into your copy, and restarts into it. Turn this off in **Settings → General**. Your vault is never touched by an update.
+Satchel then offers new versions itself: a blue circle appears in the window when one is out. It downloads the update from satchel.echospace.dev, checks its size, checksum and signature against a key built into your copy, and restarts into it. Turn this off in **Settings → General**. Your vault is never touched by an update.
 
 ## First run
 
@@ -94,13 +91,13 @@ UNIVERSAL=1 VERSION=0.1.0 scripts/make-dmg.sh   # build/Satchel-0.1.0.dmg
 
 ## Releasing (maintainers)
 
-`.github/workflows/release.yml` tests, builds a universal DMG and publishes it as release `v0.1.<commit count>` on every push to `main` that changes the app. In-app updates need releases to be signed:
+`.github/workflows/release.yml` tests and builds a universal DMG (version `0.1.<commit count>`) on every push to `main` that changes the app, then uploads it to the private Cloudflare R2 bucket `satchel-releases`: `releases/Satchel-<version>.dmg`, its `.sig`, and last `latest.json`, which the website turns into the download link and the update feed (`https://satchel.echospace.dev/api/update`). Nothing is published on GitHub. Secrets, all in the GitHub environment `release` (limit it to the `main` branch in the repository settings so no other branch's workflow can read them):
 
-1. Create a key pair once: `swift scripts/update-key.swift generate`. Put the **public** key in `Resources/update-public-key.txt` and commit it. Keep the private key in a password manager.
-2. Store the private key as the secret `UPDATE_SIGNING_KEY` of a GitHub environment named `release` (`gh secret set UPDATE_SIGNING_KEY --env release`), and in the repository settings limit that environment to the `main` branch so no other branch's workflow can read it.
-3. If the repository is not `ekhodev/satchel`, set `SatchelUpdateRepository` in `Resources/Info.plist`.
+1. `UPDATE_SIGNING_KEY` (required): create a key pair once with `swift scripts/update-key.swift generate`, commit the **public** key as `Resources/update-public-key.txt`, keep the private key in a password manager. Losing it means existing installs can no longer update automatically.
+2. `CLOUDFLARE_R2_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (required): an API token limited to R2 writes.
+3. `APPLE_TEAM_ID`, `APPLE_DEVELOPER_ID_P12` (base64), `APPLE_DEVELOPER_ID_P12_PASSWORD`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `APPLE_API_KEY_P8` (optional): with all six the app is signed with Developer ID and hardened runtime, notarized and stapled; without them it is signed ad hoc.
 
-Without the secret the release is published unsigned and installed apps ignore it. Losing the private key means existing installs can no longer update automatically; they need a manual install of a build with a new public key.
+Licence keys are signed with a separate key pair (`swift scripts/license-key.swift`); its public half is `Resources/license-public-key.txt`. A build without that file enforces no licence.
 
 Never put your own vault into this repository. Use a separate private repository for sync.
 
@@ -110,14 +107,11 @@ Contributions are welcome through forks and pull requests. Read [CONTRIBUTING.md
 
 ## License
 
-Satchel is paid software with public source. Try every feature free for 14 days, then buy it once:
+Satchel is paid software with public source. Try every feature free for 7 days, then buy it once for $29 at [satchel.echospace.dev/pricing](https://satchel.echospace.dev/pricing), for one person on their own Macs.
 
-- **Satchel, $29:** one person, on their own Macs.
-- **Family, $49:** one household, up to 5 Macs.
+Each licence includes a year of updates, and you keep the last version from that year for good. Renewing is optional. There is no subscription and no account: the licence is a key checked on your Mac.
 
-Each licence includes a year of updates, and you keep the last version from that year for good. Renewing is optional. There is no subscription and no account: the licence is a key you paste into Settings → Licence, checked on your Mac. Licences are not on sale yet; until the buy page exists, ask through the GitHub profile.
-
-The code is public so you can audit it; the terms are in [LICENSE](LICENSE). Security is never behind the paywall, and no licence state ever makes your vault unreadable: after the trial you can still unlock Satchel and open and copy every item. The third-party components keep their own licenses (see below).
+The code is public so you can audit it; the terms are in [LICENSE](LICENSE). No licence state ever makes your vault unreadable: after the trial, without a licence, Satchel stops working except for two things. You can still unlock it, enter a licence key, and export all your items to a file. The third-party components keep their own licenses (see below).
 
 ## Credits
 

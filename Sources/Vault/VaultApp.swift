@@ -105,6 +105,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
     }
 
+    /// `satchel://activate?key=…` from the thank-you page or the purchase email.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        MainActor.assumeIsolated { for url in urls { Licensing.shared.activate(link: url) } }
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { Self.openMainWindow() }
         return true

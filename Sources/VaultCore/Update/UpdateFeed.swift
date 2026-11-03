@@ -31,45 +31,50 @@ public struct AppVersion: Comparable, Equatable, Sendable, CustomStringConvertib
 public struct UpdateOffer: Equatable, Sendable {
     public let version: AppVersion
     public let notes: String
-    public let pageURL: URL
     public let dmgURL: URL
-    public let signatureURL: URL
     public let size: Int
-    /// GitHub's `published_at`; compared with a licence's update window. Nil when the feed omits it.
+    /// Lower-case hex SHA-256 of the DMG, checked after the download and again right before install.
+    public let sha256: String
+    /// Base64 Ed25519 signature over the DMG bytes, made with the update key (not the licence key).
+    public let signature: String
+    /// When the release was published; compared with a licence's update window. Nil when the feed omits it.
     public var published: Date? = nil
 }
 
-/// Reads GitHub's "latest release" JSON. Only a release for a newer version, with a DMG and a
-/// matching signature file hosted by github.com, becomes an offer; anything else is ignored.
+/// Reads the update feed, `GET https://satchel.echospace.dev/api/update` (404 = no release yet):
+/// `{"version","url","size","sha256","signature","notes","published"}`. Only a newer version whose DMG is
+/// served by satchel.echospace.dev over https, with a well-formed digest and signature, becomes an offer.
 public enum UpdateFeed {
+    public static let url = URL(string: "https://satchel.echospace.dev/api/update")!
     public static let maxDownloadBytes = 250 * 1024 * 1024
-    /// Hosts a release asset may be served from (GitHub redirects downloads to its CDN).
-    public static let allowedHosts: Set<String> = ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"]
+    /// The only host the feed and the download may come from (redirects included).
+    public static let allowedHost = "satchel.echospace.dev"
 
     public static func isAllowedDownloadURL(_ url: URL) -> Bool {
-        url.scheme == "https" && (url.host.map { allowedHosts.contains($0.lowercased()) } ?? false)
+        url.scheme == "https" && url.host?.lowercased() == allowedHost && url.port == nil
     }
 
     /// `allowLocal` is for tests and development builds that serve a feed from this machine.
-    public static func parse(_ json: Data, current: AppVersion, repository: String, allowLocal: Bool = false) -> UpdateOffer? {
+    public static func parse(_ json: Data, current: AppVersion, allowLocal: Bool = false) -> UpdateOffer? {
         guard let obj = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
-              obj["draft"] as? Bool != true, obj["prerelease"] as? Bool != true,
-              let tag = obj["tag_name"] as? String, let version = AppVersion(tag), version > current,
-              let assets = obj["assets"] as? [[String: Any]] else { return nil }
-        let wanted = "Satchel-\(version).dmg"
-        func asset(_ name: String) -> (URL, Int)? {
-            guard let a = assets.first(where: { $0["name"] as? String == name }),
-                  let s = a["browser_download_url"] as? String, let url = URL(string: s) else { return nil }
-            if allowLocal, ["localhost", "127.0.0.1"].contains(url.host ?? "") { return (url, a["size"] as? Int ?? 0) }
-            guard isAllowedDownloadURL(url), url.host?.lowercased() == "github.com",
-                  url.path.hasPrefix("/\(repository)/releases/download/") else { return nil }
-            return (url, a["size"] as? Int ?? 0)
-        }
-        guard let (dmg, size) = asset(wanted), size > 0, size <= maxDownloadBytes, let (sig, _) = asset(wanted + ".sig") else { return nil }
-        let page = (obj["html_url"] as? String).flatMap(URL.init) ?? URL(string: "https://github.com/\(repository)/releases")!
-        return UpdateOffer(version: version, notes: String((obj["body"] as? String ?? "").prefix(4000)),
-                           pageURL: page, dmgURL: dmg, signatureURL: sig, size: size,
-                           published: (obj["published_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) })
+              let v = obj["version"] as? String, let version = AppVersion(v), version > current,
+              let link = obj["url"] as? String, let dmg = URL(string: link),
+              let size = obj["size"] as? Int, size > 0, size <= maxDownloadBytes,
+              let sha = (obj["sha256"] as? String)?.lowercased(), sha.count == 64, sha.allSatisfy({ "0123456789abcdef".contains($0) }),
+              let signature = obj["signature"] as? String, Data(base64Encoded: signature)?.count == 64 else { return nil }
+        let local = allowLocal && ["localhost", "127.0.0.1"].contains(dmg.host ?? "")
+        guard local || (isAllowedDownloadURL(dmg) && dmg.path == "/download/Satchel-\(version).dmg") else { return nil }
+        return UpdateOffer(version: version, notes: String((obj["notes"] as? String ?? "").prefix(4000)), dmgURL: dmg,
+                           size: size, sha256: sha, signature: signature,
+                           published: (obj["published"] as? String).flatMap(date))
+    }
+
+    /// ISO 8601, with or without fractional seconds (`2026-11-03T10:00:00Z`, JavaScript's `…:00.000Z`).
+    static func date(_ text: String) -> Date? {
+        let f = ISO8601DateFormatter()
+        if let d = f.date(from: text) { return d }
+        f.formatOptions.insert(.withFractionalSeconds)
+        return f.date(from: text)
     }
 }
 

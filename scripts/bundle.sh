@@ -1,7 +1,8 @@
 #!/bin/zsh
-# Build the release binary and assemble + ad-hoc sign build/Satchel.app.
+# Build the release binary and assemble + sign build/Satchel.app (ad hoc unless SIGN_IDENTITY is set).
 #   VERSION=0.1.27 BUILD_NUMBER=27   stamp the bundle version (default: Resources/Info.plist)
 #   UNIVERSAL=1                      build arm64 + x86_64 (what releases ship)
+#   SIGN_IDENTITY=<hash or name>     sign with this Developer ID Application identity (SIGN_KEYCHAIN: its keychain)
 set -euo pipefail
 setopt null_glob
 cd "$(dirname "$0")/.."
@@ -52,9 +53,6 @@ fi
 if [ -s Resources/license-public-key.txt ]; then
   /usr/libexec/PlistBuddy -c "Set :SatchelLicensePublicKey $(tr -d '[:space:]' < Resources/license-public-key.txt)" "$APP/Contents/Info.plist"
 fi
-if [ -n "${UPDATE_REPOSITORY:-}" ]; then
-  /usr/libexec/PlistBuddy -c "Set :SatchelUpdateRepository $UPDATE_REPOSITORY" "$APP/Contents/Info.plist"
-fi
 # Browser extension (built by extension/build.sh) ships inside the bundle for "Load unpacked".
 if [ -x extension/build.sh ]; then ./extension/build.sh >/dev/null && cp -R extension/dist "$APP/Contents/Resources/extension"; fi
 # Dynamic frameworks produced by dependencies (Clibsodium is static in swift-sodium 0.11; kept for safety).
@@ -72,15 +70,24 @@ fi
 cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 cp THIRD_PARTY_NOTICES.md LICENSE "$APP/Contents/Resources/"
 
-# Ad-hoc signature with hardened runtime. Entitlements are deliberately empty: no sandbox
-# (auto-type later), no library-validation bypass, no dyld env vars, no get-task-allow. A stable identifier keeps the designated
-# requirement stable across rebuilds, which matters for Secure Enclave key access.
-codesign --force --deep --sign - \
-  --identifier "com.bilalesi.satchel" \
-  --entitlements Resources/Satchel.entitlements \
-  --options runtime \
-  "$APP"
+# Hardened runtime either way. Entitlements are deliberately empty: no sandbox (auto-type), no library-validation
+# bypass, no dyld env vars, no get-task-allow. A stable identifier keeps the designated requirement stable across
+# rebuilds, which matters for Secure Enclave key access.
+if [ -n "${SIGN_IDENTITY:-}" ]; then
+  # Developer ID (then notarized by the release workflow): nested code first, inside out, each with a secure
+  # timestamp; Apple advises against --deep for signing.
+  SIGN=(codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY")
+  [ -n "${SIGN_KEYCHAIN:-}" ] && SIGN+=(--keychain "$SIGN_KEYCHAIN")
+  for f in "$APP"/Contents/Frameworks/*.framework "$APP/Contents/MacOS/satchel-host"; do "${SIGN[@]}" "$f"; done
+  "${SIGN[@]}" --identifier "com.bilalesi.satchel" --entitlements Resources/Satchel.entitlements "$APP"
+else
+  codesign --force --deep --sign - \
+    --identifier "com.bilalesi.satchel" \
+    --entitlements Resources/Satchel.entitlements \
+    --options runtime \
+    "$APP"
+fi
 # No code may depend on a SwiftPM resource bundle (its lookup falls back to the build machine's path).
 if strings "$APP/Contents/MacOS/$NAME" | grep -q "_VaultCore.bundle"; then echo "binary references a SwiftPM resource bundle" >&2; exit 1; fi
-codesign --verify --strict "$APP"
+codesign --verify --deep --strict "$APP"
 echo "Built $APP ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist"), archs: $(lipo -archs "$APP/Contents/MacOS/$NAME"))"

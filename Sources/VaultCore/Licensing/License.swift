@@ -4,9 +4,10 @@ import Foundation
 /// `1|<plan>|<purchase date yyyy-MM-dd>|<id>` and the signature is Ed25519 over its exact bytes, checked
 /// against the public key built into the app (the same check as update signatures, with its own key pair).
 ///
-/// Licensing never touches the vault's keys or files: a missing or bad licence can only switch off
-/// convenience features, never make an item unreadable.
+/// Licensing never touches the vault's keys or files: after the trial without a licence Satchel still unlocks
+/// and exports every item; nothing is ever made unreadable.
 public struct License: Equatable, Sendable {
+    /// Only `single` is sold; `family` is still parsed so a key issued as one keeps working.
     public enum Plan: String, Sendable { case single, family }
 
     public static let prefix = "SATCHEL-"
@@ -35,7 +36,20 @@ public struct License: Equatable, Sendable {
         return date <= updatesUntil
     }
 
-    public var planName: String { plan == .family ? "Family (5 Macs)" : "Satchel" }
+    public var planName: String { "Satchel" }
+
+    /// Whether Satchel may be used: with a licence, during the trial, or always in a build without a licence key.
+    public static func allowsUse(enforced: Bool, license: License?, trial: Trial, now: Date = Date()) -> Bool {
+        !enforced || license != nil || !trial.isOver(now: now)
+    }
+
+    /// The key in `satchel://activate?key=…` (the link on the thank-you page and in the purchase email).
+    public static func key(fromActivationURL url: URL) -> String? {
+        guard url.scheme?.lowercased() == "satchel", url.host?.lowercased() == "activate",
+              let key = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "key" })?.value,
+              !key.isEmpty else { return nil }
+        return key
+    }
 
     /// The signed text. Changing it invalidates every key ever issued, so it stays exactly this.
     public var payload: String {
@@ -91,12 +105,9 @@ public struct License: Equatable, Sendable {
     }
 }
 
-/// The free trial: `days` days from the first launch, counted on this Mac only.
-/// ponytail: the start date lives in UserDefaults, so `defaults delete` or a clock set back restarts or
-/// extends it. That is accepted on purpose (perfect DRM in a native binary is not achievable, §6.3);
-/// add a Keychain copy only if trial resets become a measured problem.
+/// The free trial: `days` days from the first launch, counted on this Mac only (start kept by `TrialStore`).
 public struct Trial: Equatable, Sendable {
-    public static let days = 14
+    public static let days = 7
     public let started: Date
 
     public init(started: Date) { self.started = started }

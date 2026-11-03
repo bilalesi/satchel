@@ -84,7 +84,7 @@ struct GeneralSettings: View {
                     } label: {
                         Text(updates.message ?? "Version \(updates.currentVersion.description)").font(.callout).foregroundStyle(.secondary)
                     }
-                    Text("Satchel contacts github.com only to look for a newer release. Updates are verified with a signature before they are installed.")
+                    Text("Satchel contacts satchel.echospace.dev only to look for a newer release. Updates are verified with a signature before they are installed.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
@@ -223,7 +223,7 @@ struct VaultSettings: View {
     @EnvironmentObject var session: VaultSession
 
     var body: some View {
-        SettingsPage(height: 540 + CGFloat(session.workspaces.count) * 36) {
+        SettingsPage(height: 590 + CGFloat(session.workspaces.count) * 36) {
             WorkspaceManager()
             Section("Location") {
                 LabeledContent("Folder") {
@@ -251,6 +251,12 @@ struct VaultSettings: View {
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")
                 LabeledContent("Items", value: "\(session.items.count)")
+                LabeledContent {
+                    PillButton("Export…", icon: .save, compact: true) { ItemExport.run(session) }
+                        .disabled(session.state != .unlocked)
+                } label: {
+                    Text("All items of this workspace as a JSON file, not encrypted.").font(.callout).foregroundStyle(.secondary)
+                }
                 LabeledContent("Open source") {
                     PillButton("Licenses", icon: .note, compact: true) {
                         if let url = Bundle.main.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "md") { NSWorkspace.shared.open(url) }
@@ -282,7 +288,7 @@ struct LicenseSettings: View {
                     LabeledContent("Updates until", value: l.updatesUntil.formatted(date: .long, time: .omitted))
                     LabeledContent("Key", value: l.id)
                     LabeledContent {
-                        PillButton("Remove", icon: .close, kind: .danger, compact: true) { licensing.remove(); updates.licenseChanged() }
+                        PillButton("Remove", icon: .close, kind: .danger, compact: true) { licensing.remove() }
                     } label: {
                         Text("Releases after the last day keep being offered as a renewal. The version you have stays yours.")
                             .font(.callout).foregroundStyle(.secondary)
@@ -294,7 +300,7 @@ struct LicenseSettings: View {
                     LabeledContent("Status", value: left > 0 ? "\(left) \(left == 1 ? "day" : "days") left" : "Ended")
                     Text(left > 0
                          ? "Every feature is on during the trial. Your vault never depends on a licence."
-                         : "Your vault stays open: unlock, read, copy and edit every item. Browser fill and auto-type need a licence.")
+                         : "Satchel needs a licence to keep working. You can always unlock it and export your items.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Section("Licence key") {
@@ -304,7 +310,7 @@ struct LicenseSettings: View {
                         HStack {
                             PillButton("Buy", icon: .linkExternal, compact: true) { NSWorkspace.shared.open(AppIdentity.purchaseURL) }
                             PillButton("Activate", icon: .key, kind: .primary, compact: true) {
-                                if licensing.activate(key) { key = ""; error = nil; updates.licenseChanged() }
+                                if licensing.activate(key) { key = ""; error = nil }
                                 else { error = "This key is not valid. Paste it exactly as you received it." }
                             }
                             .disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

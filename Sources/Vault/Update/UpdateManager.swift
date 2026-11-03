@@ -1,14 +1,15 @@
 import AppKit
+import Combine
 import CryptoKit
 import Foundation
 import os
 import VaultCore
 
-/// Checks GitHub Releases for a newer signed build, downloads it, verifies the Ed25519
-/// signature against the public key baked into this app, and swaps the app bundle.
+/// Checks satchel.echospace.dev for a newer signed build, downloads it, verifies its size, SHA-256 and
+/// Ed25519 signature against the public key baked into this app, and swaps the app bundle.
 ///
-/// Network use is limited to api.github.com (release metadata) and github.com's release
-/// downloads. Nothing about the vault or the user is sent. Turn it off in Settings → General.
+/// Network use is limited to satchel.echospace.dev (the feed and the DMG). Nothing about the vault or the
+/// user is sent. Turn it off in Settings → General.
 @MainActor
 final class UpdateManager: NSObject, ObservableObject {
     enum State: Equatable {
@@ -37,15 +38,9 @@ final class UpdateManager: NSObject, ObservableObject {
     private var downloadingOffer: UpdateOffer?
     /// SHA-256 of the DMG at the moment its signature was verified; checked again right before install.
     private var verifiedDigest: String?
+    private var licenseWatch: AnyCancellable?
 
     // MARK: Configuration
-
-    private var repository: String {
-        #if DEBUG
-        if let r = ProcessInfo.processInfo.environment["SATCHEL_UPDATE_REPO"] { return r }
-        #endif
-        return Bundle.main.object(forInfoDictionaryKey: "SatchelUpdateRepository") as? String ?? ""
-    }
 
     private var publicKey: String {
         #if DEBUG
@@ -58,7 +53,7 @@ final class UpdateManager: NSObject, ObservableObject {
         #if DEBUG
         if let f = ProcessInfo.processInfo.environment["SATCHEL_UPDATE_FEED"] { return URL(string: f) }
         #endif
-        return URL(string: "https://api.github.com/repos/\(repository)/releases/latest")
+        return UpdateFeed.url
     }
 
     private var allowLocal: Bool {
@@ -69,9 +64,8 @@ final class UpdateManager: NSObject, ObservableObject {
         #endif
     }
 
-    /// Updates need a repository and a public key; a build without them (a development build)
-    /// never contacts the network for updates.
-    var isAvailable: Bool { !repository.isEmpty && !publicKey.isEmpty }
+    /// Updates need the public key; a build without it (a development build) never contacts the network for updates.
+    var isAvailable: Bool { !publicKey.isEmpty }
 
     var isEnabled: Bool { isAvailable && UserDefaults.standard.bool(forKey: Self.enabledKey) }
 
@@ -85,6 +79,8 @@ final class UpdateManager: NSObject, ObservableObject {
         let cfg = URLSessionConfiguration.default
         cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
         session = URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
+        // Observer: a key entered in Settings or through a satchel://activate link may change what an offer is.
+        licenseWatch = Licensing.shared.$license.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in self?.licenseChanged() }
     }
 
     /// Checks shortly after launch and then every six hours, if the user allows it.
@@ -119,14 +115,14 @@ final class UpdateManager: NSObject, ObservableObject {
         do {
             guard let url = feedURL else { throw URLError(.badURL) }
             var req = URLRequest(url: url)
-            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            req.setValue("application/json", forHTTPHeaderField: "Accept")
             req.setValue("\(AppIdentity.name)/\(currentVersion)", forHTTPHeaderField: "User-Agent")
             req.timeoutInterval = 20
             let (data, resp) = try await session.data(for: req)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             if status == 404 { state = previousOrIdle(previous); if manual { message = "You're up to date." }; return }
             guard status == 200 else { throw URLError(.badServerResponse) }
-            if let offer = UpdateFeed.parse(data, current: currentVersion, repository: repository, allowLocal: allowLocal) {
+            if let offer = UpdateFeed.parse(data, current: currentVersion, allowLocal: allowLocal) {
                 let covered = Licensing.shared.covers(offer)
                 if case .available(let known) = previous, known.version == offer.version {} else if case .renew(let known) = previous, known.version == offer.version {} else {
                     NotchHUD.shared.show(title: covered ? "Update available" : "Satchel \(offer.version) is out",
@@ -149,8 +145,8 @@ final class UpdateManager: NSObject, ObservableObject {
         switch s { case .available, .renew: return s; default: return .idle }
     }
 
-    /// After a licence is entered, an offer waiting for renewal may now be covered.
-    func licenseChanged() {
+    /// After a licence is entered or removed, an offer may move between "download" and "renew".
+    private func licenseChanged() {
         if case .renew(let o) = state, Licensing.shared.covers(o) { state = .available(o) }
         else if case .available(let o) = state, !Licensing.shared.covers(o) { state = .renew(o) }
     }
@@ -167,13 +163,13 @@ final class UpdateManager: NSObject, ObservableObject {
         state = .downloading(offer, 0)
         do {
             let file = try await fetch(offer.dmgURL)
-            let sigData = try await fetchData(offer.signatureURL, maxBytes: 4096)
-            let signature = String(decoding: sigData, as: UTF8.self)
             let key = publicKey
             let digest = try await Task.detached(priority: .userInitiated) { () -> String? in
                 let data = try Data(contentsOf: file, options: .mappedIfSafe)
-                guard data.count == offer.size, UpdateSignature.verify(data, signature: signature, publicKey: key) else { return nil }
-                return Self.sha256(data)
+                let digest = Self.sha256(data)
+                guard data.count == offer.size, digest == offer.sha256,
+                      UpdateSignature.verify(data, signature: offer.signature, publicKey: key) else { return nil }
+                return digest
             }.value
             guard let digest else {
                 try? FileManager.default.removeItem(at: file)
@@ -197,13 +193,6 @@ final class UpdateManager: NSObject, ObservableObject {
             if case .downloading(let o, _) = state { downloadingOffer = o }
             task.resume()
         }
-    }
-
-    private func fetchData(_ url: URL, maxBytes: Int) async throws -> Data {
-        guard allowLocal || UpdateFeed.isAllowedDownloadURL(url) else { throw UpdateError.untrustedURL }
-        let (data, resp) = try await session.data(from: url)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count <= maxBytes else { throw UpdateError.badSignature }
-        return data
     }
 
     private nonisolated static func sha256(_ data: Data) -> String {
@@ -299,7 +288,7 @@ extension UpdateManager: URLSessionDownloadDelegate, URLSessionTaskDelegate {
         }
     }
 
-    /// A redirect may only lead to GitHub's own hosts, over https.
+    /// A redirect may only lead to satchel.echospace.dev, over https.
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                                 newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         guard let url = request.url else { return completionHandler(nil) }

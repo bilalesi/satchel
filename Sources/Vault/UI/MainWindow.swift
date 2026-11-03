@@ -11,6 +11,7 @@ enum SidebarSelection: Hashable {
 struct MainWindow: View {
     @EnvironmentObject var session: VaultSession
     @EnvironmentObject var sync: SyncCoordinator
+    @ObservedObject private var licensing = Licensing.shared
     @State private var selection: SidebarSelection? = .home
     @State private var selectedItem: UUID?
     @State private var query = ""
@@ -26,7 +27,7 @@ struct MainWindow: View {
     var body: some View {
         Group {
             if session.state == .unlocked {
-                workspace
+                if licensing.allowsUse { workspace } else { TrialEndedView() }
             } else {
                 UnlockView()
             }

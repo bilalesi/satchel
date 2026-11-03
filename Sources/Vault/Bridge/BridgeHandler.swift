@@ -16,7 +16,7 @@ final class BridgeHandler {
         guard let origin = req.origin, BrowserIntegration.allowedOrigins.contains(origin) else {
             return .failure(req.id, "origin_not_allowed")
         }
-        if Self.licensed.contains(req.type), !Licensing.shared.conveniencesOn { return .failure(req.id, "trial_ended") }
+        if Self.licensed.contains(req.type), !Licensing.shared.allowsUse { return .failure(req.id, "trial_ended") }
         switch req.type {
         case "hello", "status":
             return status(req.id)

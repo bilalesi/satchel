@@ -5,7 +5,7 @@
 #   WAIT=10 scripts/demo.sh    seconds to wait for the window
 #   EXTRA_ENV="A=1 B=2" scripts/demo.sh   extra environment for the app (debug switches)
 #   DEMO_SYNC=1 scripts/demo.sh   Personal already syncs to a folder, Banking kept on this Mac
-#   DEMO_TRIAL_AGO=20 scripts/demo.sh   the trial started 20 days ago (ended); a licence key to paste is in build/demo/license-key.txt
+#   DEMO_TRIAL_AGO=10 scripts/demo.sh   the trial started 10 days ago (ended); a licence key to paste is in build/demo/license-key.txt
 # Master password of every demo workspace: demo-password-123
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -28,6 +28,7 @@ codesign --force --deep --sign - --identifier "$ID" "$APP" >/dev/null 2>&1
 
 # 3. Settings: the workspace list, and a few non-default choices so Settings and the menu look lived in.
 defaults delete "$ID" >/dev/null 2>&1 || true
+security delete-generic-password -s "$ID.trial" -a trialStarted >/dev/null 2>&1 || true # the trial start's Keychain copy
 defaults write "$ID" workspaces -data "$(xxd -p -c0 "$DEMO/vaults/workspaces.json")"
 defaults write "$ID" activeWorkspace "11111111-1111-4111-8111-111111111111"
 defaults write "$ID" didShowWelcome -bool true
@@ -45,7 +46,7 @@ defaults write "$ID" menuLooks -data "$(printf '%s' '{"favorites":{"icon":"satch
 pair=$(swift scripts/license-key.swift generate)
 LICENSE_PUB=$(print -r -- "$pair" | awk '/^public /{print $2}')
 LICENSE_SIGNING_KEY=$(print -r -- "$pair" | awk '/^private /{print $2}') \
-  swift scripts/license-key.swift issue family "$(date -u +%Y-%m-%d)" demo-0001 > "$DEMO/license-key.txt"
+  swift scripts/license-key.swift issue single "$(date -u +%Y-%m-%d)" demo-0001 > "$DEMO/license-key.txt"
 [ -n "${DEMO_TRIAL_AGO:-}" ] && defaults write "$ID" trialStarted -date "$(date -u -v-${DEMO_TRIAL_AGO}d '+%Y-%m-%d %H:%M:%S +0000')"
 
 # 4. Launch, unlocked on the first workspace. Through LaunchServices (`open -n`), so the app is its own

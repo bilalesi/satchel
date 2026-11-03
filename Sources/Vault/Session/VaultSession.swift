@@ -312,6 +312,21 @@ final class VaultSession: ObservableObject {
         } catch { lastError = error.localizedDescription }
     }
 
+    /// Writes every item of the unlocked workspace to `url` as plain JSON (`VaultExport`), readable by this user
+    /// only. A damaged item is skipped and counted, never stops the rest. Returns (written, unreadable).
+    func exportItems(to url: URL) throws -> (written: Int, unreadable: Int) {
+        guard let store else { throw VaultError.locked }
+        var rows: [(ItemOverview, ItemDetails)] = []
+        for item in items { if let d = try? store.details(for: item.id) { rows.append((item, d)) } }
+        let data = try VaultExport.json(workspace: activeWorkspace.name, items: rows,
+                                        categories: Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0.name) }))
+        // Created with 0600 from the start, so the plain file is never readable by other users, even briefly.
+        guard FileManager.default.createFile(atPath: url.path, contents: data, attributes: [.posixPermissions: 0o600]) else {
+            throw VaultError.io("Could not write \(url.lastPathComponent).")
+        }
+        return (rows.count, items.count - rows.count + corruptIDs.count)
+    }
+
     func search(_ text: String, frontmostBundleID: String? = nil, limit: Int = 50) -> [ItemOverview] {
         index.query(text, frontmostBundleID: frontmostBundleID, limit: limit)
     }
@@ -324,7 +339,7 @@ final class VaultSession: ObservableObject {
     /// Types a field into `app`. Returns an error message to show, or nil on success.
     func typeField(_ field: String, of id: UUID, into app: NSRunningApplication?) async -> String? {
         guard AppSettings.autoTypeEnabled else { return "Auto-type is off. Enable it in Settings → Security." }
-        guard Licensing.shared.conveniencesOn else { return Licensing.endedMessage }
+        guard Licensing.shared.allowsUse else { return Licensing.endedMessage }
         guard let app else { return AutoTypeError.noTargetApp.errorDescription }
         do {
             let value: String?
