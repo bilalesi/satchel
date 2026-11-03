@@ -13,9 +13,14 @@ import VaultCore
 final class SyncCoordinator: ObservableObject {
     enum Status: Equatable {
         case off, idle, syncing, error(String)
+        var isError: Bool { if case .error = self { return true } else { return false } }
     }
 
     @Published private(set) var status: Status = .off
+    /// The last run stopped because the remote is empty or older than what this Mac synced (rollback protection).
+    /// Settings then offers Start over, which only the person can decide: the remote may have been emptied on
+    /// purpose, or by mistake, or restored from a backup.
+    @Published private(set) var canStartOver = false
     @Published private(set) var lastSyncAt: Date?
     private var announceNext = false
     @Published private(set) var lastReport: SyncReport?
@@ -109,6 +114,17 @@ final class SyncCoordinator: ObservableObject {
         status = newConfig == .off ? .off : .idle
         lastReport = nil
         requestSync(reason: "configuration changed", delay: 0)
+    }
+
+    /// Forgets what this Mac agreed with the remote (generation and versions), then syncs: an empty remote gets this
+    /// Mac's vault, an older one is merged as if this Mac had never synced with it. Nothing on this Mac is deleted.
+    func startOver() throws {
+        guard let store = session?.store, store.isUnlocked else { throw VaultError.locked }
+        try store.saveSyncState(SyncState())
+        canStartOver = false
+        lastReport = nil
+        Self.log.notice("sync: started over with \(self.config.displayName, privacy: .public)")
+        requestSync(reason: "start over", delay: 0)
     }
 
     func updateSelection(_ new: SyncSelection) {
@@ -218,6 +234,7 @@ final class SyncCoordinator: ObservableObject {
             lastReport = report
             lastSyncAt = Date()
             status = .idle
+            canStartOver = false
             Self.log.notice("sync ok: pulled \(report.pulled) pushed \(report.pushed) conflicts \(report.conflicts) generation \(report.generation)")
             if report.pulled > 0 || report.conflicts > 0 { try session.reload() }
         } catch {
@@ -225,6 +242,7 @@ final class SyncCoordinator: ObservableObject {
             let text = Self.describe(error, config: config)
             Self.log.error("sync failed: \(text, privacy: .public)")
             status = .error(text)
+            if case VaultError.rollbackDetected = error { canStartOver = true } else { canStartOver = false }
         }
     }
 
@@ -246,6 +264,7 @@ final class SyncCoordinator: ObservableObject {
         case let dav as WebDAVStore: try await dav.verify(); lines.append("Signed in to \(dav.baseURL.host ?? "the server").")
         case let s3 as S3Store: try await s3.verify(); lines.append("Bucket \(s3.config.bucket) is reachable.")
         case let git as GitStore: try await git.verify(); lines.append("Repository is reachable.")
+        case let folder as FolderStore: try folder.verify(); lines.append("Folder reachable.")
         default: lines.append("Folder reachable.")
         }
         if config.needsConditionalWriteProbe {
@@ -272,9 +291,9 @@ final class SyncCoordinator: ObservableObject {
     static func describe(_ error: Error, config: RemoteConfig = .off) -> String {
         switch error {
         case VaultError.rollbackDetected(let local, 0):
-            return "This remote has no vault, but this Mac synced one to it before (generation \(local)). It may have been wiped or restored. Nothing was uploaded. To start over on purpose, set Sync to Off, save, then set it up again."
+            return "The remote is empty, but this Mac has synced with it before (up to version \(local)). It may have been emptied or restored from a backup, so nothing was uploaded. If you emptied it on purpose, click Start over to upload this Mac's vault."
         case VaultError.rollbackDetected(let local, let remote):
-            return "The remote vault is older (generation \(remote)) than what this Mac last synced (\(local)). Refusing to roll back."
+            return "The vault on the remote is older (version \(remote)) than the one this Mac last synced (version \(local)), so nothing was changed. If you restored it on purpose, click Start over to merge it with this Mac's vault."
         case VaultError.corruptManifest:
             return "The remote manifest failed verification: it belongs to another vault or was modified."
         case VaultError.authenticationFailed, VaultError.corruptItemData:

@@ -9,6 +9,27 @@ final class FolderStoreTests: XCTestCase {
         let base = ProcessInfo.processInfo.environment["SATCHEL_FOLDER_TEST_ROOT"].map { URL(fileURLWithPath: $0) }
             ?? FileManager.default.temporaryDirectory
         dir = base.appendingPathComponent("folder-remote-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
+    func testAMissingFolderIsUnavailableNotEmpty() async throws {
+        // An unmounted share or an ejected drive: not an empty remote, and nothing is created in its place.
+        let gone = FileManager.default.temporaryDirectory.appendingPathComponent("unmounted-\(UUID().uuidString)")
+        let store = FolderStore(root: gone)
+        for op in ["get", "put", "list", "delete"] {
+            do {
+                switch op {
+                case "get": _ = try await store.get("manifest.vman")
+                case "put": _ = try await store.put("manifest.vman", data: Data([1]), ifMatch: nil)
+                case "list": _ = try await store.list(prefix: "items/")
+                default: try await store.delete("manifest.vman", ifMatch: nil)
+                }
+                XCTFail("\(op) must not treat a missing folder as empty")
+            } catch let e as SyncError {
+                guard case .unavailable = e else { return XCTFail("\(op): \(e)") }
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: gone.path))
     }
 
     override func tearDown() {

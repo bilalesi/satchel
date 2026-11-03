@@ -189,6 +189,7 @@ struct SyncSettings: View {
     @State private var message: String?
     @State private var testing = false
     @State private var saving = false
+    @State private var confirmStartOver = false
 
     var body: some View {
         SettingsPage(height: pageHeight) {
@@ -260,10 +261,22 @@ struct SyncSettings: View {
         return HStack(spacing: Theme.Space.s) {
             Icon(icon, size: 13)
                 .foregroundStyle(color)
-            Text(text).font(.callout).foregroundStyle(color == .secondary ? .secondary : .primary).lineLimit(2)
+            // Errors are read in full: they say what happened and what to do.
+            Text(text).font(.callout).foregroundStyle(color == .secondary ? .secondary : .primary)
+                .lineLimit(sync.status.isError ? nil : 2).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
+            if sync.canStartOver {
+                PillButton("Start over", icon: .debugRestart, compact: true) { confirmStartOver = true }
+            }
         }
         .frame(minHeight: 32)
+        .confirmationDialog("Start over with this remote?", isPresented: $confirmStartOver) {
+            Button("Start over") {
+                do { try sync.startOver() } catch { message = SyncCoordinator.describe(error) }
+            }
+        } message: {
+            Text("Satchel forgets what it last synced with \(sync.config.displayName) and syncs again: an empty remote gets this Mac's vault, an older one is merged with it. Nothing on this Mac is deleted. Other Macs that synced with the old remote will ask to start over too.")
+        }
         .animation(.easeOut(duration: 0.15), value: sync.status)
     }
 

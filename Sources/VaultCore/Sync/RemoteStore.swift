@@ -85,6 +85,8 @@ public enum SyncError: Error, Equatable, LocalizedError {
     case remote(status: Int, message: String)
     case notConfigured
     case missingToken
+    /// The place itself is not there right now (an unmounted share, an ejected drive), as opposed to an empty remote.
+    case unavailable(String)
 
     public var errorDescription: String? {
         switch self {
@@ -95,6 +97,7 @@ public enum SyncError: Error, Equatable, LocalizedError {
         case .remote(let s, let m): return "Remote error \(s): \(m)"
         case .notConfigured: return "No remote configured."
         case .missingToken: return "No GitHub token is saved on this Mac. Paste it in Settings → Sync."
+        case .unavailable(let place): return "\(place) is not available right now. Connect the drive or network share it is on, then sync again."
         }
     }
 }

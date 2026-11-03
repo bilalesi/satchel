@@ -6,6 +6,7 @@ import VaultCore
 struct OverviewCards: View {
     @EnvironmentObject var session: VaultSession
     @EnvironmentObject var sync: SyncCoordinator
+    @Environment(\.openSettings) private var openSettings
     var onSelect: (SidebarSelection) -> Void = { _ in }
     @State private var width: CGFloat = 900
 
@@ -70,7 +71,11 @@ struct OverviewCards: View {
                     footer: stale.isEmpty ? "Everything is fresh" : stale.prefix(2).map(\.title).joined(separator: ", "),
                     action: stale.isEmpty ? nil : { onSelect(.recent) })
         SummaryCard(title: "Sync", icon: .sync, color: syncColor,
-                    value: syncValue, caption: syncCaption, footer: syncFooter, action: nil)
+                    value: syncValue, caption: syncCaption, footer: syncFooter,
+                    action: sync.status.isError ? { // the full reason, and what to do, are in Settings → Sync
+                        UserDefaults.standard.set(SettingsView.Tab.sync.rawValue, forKey: "settingsTab")
+                        openSettings()
+                    } : nil)
         SummaryCard(title: "Security", icon: .shield, color: Theme.accent(.sshKey),
                     value: session.touchIDEnabled ? "Touch ID" : "Password",
                     caption: "Locks after \(AppSettings.autoLockMinutes) min",
@@ -102,7 +107,7 @@ struct OverviewCards: View {
 
     private var syncCaption: String {
         switch sync.status {
-        case .error(let m): return m
+        case .error: return "Needs attention: click to see why"
         case .off: return "Settings → Sync"
         default:
             if let d = sync.lastSyncAt { return d.formatted(.relative(presentation: .named)) }
