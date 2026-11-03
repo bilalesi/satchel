@@ -15,6 +15,24 @@
     return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
   }
 
+  // Composed parent: crosses shadow roots so a login field inside a web component is walked too.
+  const parentOf = (n) => n.parentElement || n.getRootNode().host || null;
+
+  // A field may open the menu only when the user can see it: real size, no transparent or
+  // hidden ancestor (opacity is not inherited, so the field itself may report 1), and nothing
+  // drawn over its centre. Stops a page that focuses a 1×1 invisible input under the cursor.
+  function exposed(el) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 24 || r.height < 10) return false;
+    for (let n = el; n && n !== document.documentElement; n = parentOf(n)) {
+      const cs = getComputedStyle(n);
+      if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) < 0.5) return false;
+    }
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    for (let n = el; n; n = parentOf(n)) if (n === hit) return true;
+    return false;
+  }
+
   // Username = nearest visible text/email input before the password field in DOM order,
   // preferring the same form; falls back to autocomplete="username".
   function usernameFieldFor(pw) {
@@ -59,7 +77,10 @@
     if (otp && cred.totp) setValue(otp, cred.totp);
   }
 
+  let watch = null;
+
   function closeDropdown() {
+    if (watch) { watch.disconnect(); watch = null; }
     if (dropdown) { dropdown.remove(); dropdown = null; }
     activeField = null;
     navigated = false;
@@ -79,9 +100,18 @@
 
   function showDropdown(field, items, locked) {
     closeDropdown();
+    // The menu must sit in the top layer, where page content and ancestor styles cannot cover or
+    // fade it. Without popovers (Firefox < 125) there is no in-page menu; the toolbar popup still fills.
+    if (!("showPopover" in HTMLElement.prototype)) return;
     activeField = field;
     const host = document.createElement("div");
-    host.setAttribute("data-vault-dropdown", "");
+    // Inline !important beats any page stylesheet, so the page cannot fade, clip or move the
+    // menu while it still takes clicks; a page script changing these attributes closes it (see watch).
+    host.style.cssText = "all:initial!important;position:fixed!important;inset:0!important;width:0!important;height:0!important;" +
+      "margin:0!important;padding:0!important;border:0!important;background:none!important;overflow:visible!important;" +
+      "display:block!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important;" +
+      "transform:none!important;filter:none!important;clip-path:none!important;mask:none!important;";
+    host.popover = "manual";
     const root = host.attachShadow({ mode: "closed" });
     const r = field.getBoundingClientRect();
     const style = document.createElement("style");
@@ -122,7 +152,7 @@
       const b = document.createElement("div");
       b.className = "lock";
       b.textContent = "Unlock Satchel to fill…";
-      b.addEventListener("mousedown", (e) => { e.preventDefault(); browserAPI.runtime.sendMessage({ type: "unlock" }).then(() => refresh(field)); });
+      b.addEventListener("mousedown", (e) => { if (!e.isTrusted) return; e.preventDefault(); browserAPI.runtime.sendMessage({ type: "unlock" }).then(() => refresh(field)); });
       box.appendChild(b);
     } else {
       items.forEach((it, i) => {
@@ -145,7 +175,12 @@
         fill.className = "fill";
         fill.textContent = "Fill";
         row.append(tile, txt, fill);
-        row.addEventListener("mousedown", (e) => { e.preventDefault(); pick(it.id, field); });
+        row.addEventListener("mousedown", (e) => {
+          // A real press, and the menu is what is under the pointer (the closed shadow root reports its host).
+          if (!e.isTrusted || e.button !== 0) return;
+          e.preventDefault();
+          if (document.elementFromPoint(e.clientX, e.clientY) === host) pick(it.id, field);
+        });
         row.addEventListener("mousemove", () => select(i));
         box.appendChild(row);
         rows.push({ el: row, id: it.id });
@@ -158,10 +193,31 @@
     root.appendChild(style);
     root.appendChild(box);
     document.documentElement.appendChild(host);
+    try { host.showPopover(); } catch {}
     dropdown = host;
+    if (!host.matches(":popover-open")) { closeDropdown(); return; }
+    // The page shares this DOM node: any change to its attributes (style, popover, …) is tampering.
+    // Observer callbacks run as microtasks, so a page pointerdown handler that restores the style
+    // still closes the menu before the mousedown that would pick.
+    watch = new MutationObserver(closeDropdown);
+    watch.observe(host, { attributes: true });
+  }
+
+  // Checked right before a fill: the menu is ours, still open in the top layer, fully opaque,
+  // and nothing the page put in the top layer after it can sit on top of it.
+  function intact() {
+    const host = dropdown;
+    if (!host || !host.isConnected || !host.matches(":popover-open")) return false;
+    const cs = getComputedStyle(host);
+    if (cs.opacity !== "1" || cs.visibility !== "visible" || cs.filter !== "none" || cs.mixBlendMode !== "normal") return false;
+    // ponytail: a top-layer element inside the page's own shadow root is not seen here; IntersectionObserver v2
+    // (trackVisibility, Chromium only) would catch it if that ever matters.
+    if (document.fullscreenElement) return false;
+    return [...document.querySelectorAll(":popover-open, :modal")].every((n) => n === host);
   }
 
   async function pick(itemID, field) {
+    if (!intact()) { closeDropdown(); return; }
     const r = await browserAPI.runtime.sendMessage({ type: "fill", itemID });
     closeDropdown();
     if (r && r.ok && r.credential) fillCredential(r.credential, field);
@@ -176,23 +232,37 @@
   }
 
   function isLoginField(el) {
-    if (!(el instanceof HTMLInputElement) || !visible(el)) return false;
+    if (!(el instanceof HTMLInputElement) || !exposed(el)) return false;
     if (el.type === "password") return true;
     if (el.matches(OTP_SELECTOR)) return true;
     return el.matches(USERNAME_SELECTOR) && passwordFieldFor(el) !== null;
   }
 
-  // Only real user input may open the dropdown or trigger a fill: a page script can
-  // dispatch synthetic events, and those carry isTrusted === false.
+  // Only real user input may open the dropdown or trigger a fill. isTrusted alone is not
+  // enough: element.focus() from a page script fires a *trusted* focusin, so the field must
+  // also be the one the user pressed, or focus must follow a Tab the user just pressed.
+  let armed = null;
+  let tabAt = -1;
+  document.addEventListener("pointerdown", (e) => { if (e.isTrusted) armed = e.target; }, true);
   document.addEventListener("focusin", (e) => {
     if (!e.isTrusted) return;
+    const byUser = e.target === armed || e.timeStamp - tabAt < 300;
+    armed = null;
+    if (!byUser) return;
+    closeDropdown(); // the previous field's menu may cover this field, which would fail its exposure test
     if (isLoginField(e.target)) refresh(e.target);
   }, true);
-  document.addEventListener("focusout", () => { setTimeout(closeDropdown, 150); }, true);
+  // Close when focus has really left: moving to another login field opens its own menu
+  // before this timer fires, and that menu must stay.
+  document.addEventListener("focusout", () => {
+    setTimeout(() => { if (document.activeElement !== activeField) closeDropdown(); }, 150);
+  }, true);
   // Arrow keys walk the list while it is open. Enter picks only after an arrow key (or Alt+Enter),
   // so typing a username and pressing Enter to submit the form still works.
   document.addEventListener("keydown", (e) => {
-    if (!e.isTrusted || !dropdown) return;
+    if (!e.isTrusted) return;
+    if (e.key === "Tab") tabAt = e.timeStamp;
+    if (!dropdown) return;
     if (e.key === "Escape") { closeDropdown(); return; }
     if (!rows.length) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {

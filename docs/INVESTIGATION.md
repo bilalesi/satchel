@@ -233,7 +233,7 @@ Swift has no secure string; `String` copies freely. Rules:
 | Phishing site that looks like gmail.com | Yes | Extension matches eTLD+1 of the top frame only; no fill into other origins; no auto-fill without gesture. |
 | Another ordinary app on the Mac while vault is **locked** | Yes | Keys zeroed; files are ciphertext; Keychain item for SE is useless without the chip + biometry. |
 | Other app while **unlocked**, running as your user (malware, malicious npm script) | **No** | It can read our memory, post synthetic clicks, read the clipboard. Mitigations only: short auto-lock, concealed-clipboard + auto-clear, Touch ID re-prompt for "sensitive" items, hardened runtime (blocks code injection into *our* process), `PT_DENY_ATTACH` (bypassable by root, still raises the bar). No password manager survives this adversary; say so in the docs. |
-| Compromised browser or malicious extension | Partial | Native messaging host only accepts our extension ID; the app verifies the host's code signature over XPC. A fully compromised browser can still request credentials for sites it is on; Touch ID-gating sensitive items limits blast radius. |
+| Compromised browser or malicious extension | Partial | The browser only launches the host for our extension ID; the app accepts the host executable from its own bundle only, and only when its parent process is a browser signed by a known vendor (Team ID allowlist in `BridgeServer`), so another local process cannot run the host with a forged origin. A fully compromised browser can still request credentials for sites it is on; Touch ID-gating sensitive items limits blast radius. |
 | Compromised kernel / Apple | No | Out of scope. |
 
 ### 6.2 Mistakes to avoid ("stupid ideas" list)

@@ -55,14 +55,25 @@ public enum UnixSocket {
         return client
     }
 
-    /// Executable path of the process on the other end of a connected unix socket.
-    public static func peerExecutablePath(_ fd: Int32) -> String? {
+    /// Process on the other end of a connected unix socket.
+    public static func peerPID(_ fd: Int32) -> pid_t? {
         var pid: pid_t = 0
         var len = socklen_t(MemoryLayout<pid_t>.size)
         guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &len) == 0, pid > 0 else { return nil }
+        return pid
+    }
+
+    public static func executablePath(of pid: pid_t) -> String? {
         var buf = [CChar](repeating: 0, count: 4096)
         guard proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 else { return nil }
         return String(cString: buf)
+    }
+
+    public static func parentPID(of pid: pid_t) -> pid_t? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return pid_t(info.pbi_ppid)
     }
 
     public static func writeAll(_ fd: Int32, _ data: Data) -> Bool {
