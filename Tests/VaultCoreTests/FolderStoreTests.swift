@@ -5,7 +5,10 @@ final class FolderStoreTests: XCTestCase {
     var dir: URL!
 
     override func setUp() {
-        dir = FileManager.default.temporaryDirectory.appendingPathComponent("folder-remote-\(UUID().uuidString)")
+        // SATCHEL_FOLDER_TEST_ROOT=/Volumes/vault runs these against a network share or another real folder.
+        let base = ProcessInfo.processInfo.environment["SATCHEL_FOLDER_TEST_ROOT"].map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.temporaryDirectory
+        dir = base.appendingPathComponent("folder-remote-\(UUID().uuidString)")
     }
 
     override func tearDown() {
