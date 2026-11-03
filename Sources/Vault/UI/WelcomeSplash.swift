@@ -257,9 +257,13 @@ enum SplashArt {
         if wordAlpha > 0.01 {
             var w = context
             w.opacity = wordAlpha
-            let baseY = center.y + logoSize * 0.5 * appearScale + 46 - 8 * (1 - wordIn)
-            w.draw(w.resolve(Text("Satchel").font(.system(size: 30, weight: .light)).kerning(5).foregroundColor(cream)),
-                   at: CGPoint(x: W / 2, y: baseY), anchor: .center)
+            // Measured from the icon's visible edge (the 1024 canvas has a 100-unit margin), so the name sits close.
+            let iconBottom = center.y + (924 - 512) * b * appearScale
+            let baseY = iconBottom + 30 - 8 * (1 - wordIn)
+            // The logo's own letters (scripts/make-wordmark.py), not a system font.
+            let h: CGFloat = 30, ww = h * Wordmark.aspectRatio
+            w.stroke(Wordmark().path(in: CGRect(x: W / 2 - ww / 2, y: baseY - h / 2, width: ww, height: h)),
+                     with: .color(cream), style: StrokeStyle(lineWidth: Wordmark.lineWidth(forHeight: h)))
             w.draw(w.resolve(Text("Your secrets, kept close.").font(.system(size: 13)).kerning(0.6).foregroundColor(cream.opacity(0.62))),
                    at: CGPoint(x: W / 2, y: baseY + 30), anchor: .center)
         }

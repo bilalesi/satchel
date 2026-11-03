@@ -59,7 +59,7 @@ struct MainMenuCard: View {
             HStack(spacing: Theme.Space.m) {
                 Image(nsImage: NSApp.applicationIconImage).resizable().interpolation(.high).frame(width: 32, height: 32)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(AppIdentity.name).font(Theme.headline)
+                    WordmarkView(height: 15).foregroundStyle(.primary) // the logo's own letters, not the system font
                     Text("\(content.workspaceName) · \(content.statusText)").font(Theme.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
