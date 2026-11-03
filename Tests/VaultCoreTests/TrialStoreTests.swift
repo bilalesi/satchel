@@ -8,7 +8,7 @@ final class TrialStoreTests: XCTestCase {
 
     override func setUp() {
         defaults = UserDefaults(suiteName: suite)!
-        store = TrialStore(defaults: defaults, service: "com.bilalesi.satchel.tests.\(UUID().uuidString)")
+        store = TrialStore(defaults: defaults, service: "com.ekhodev.satchel.tests.\(UUID().uuidString)")
     }
 
     override func tearDown() {

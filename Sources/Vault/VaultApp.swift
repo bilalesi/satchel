@@ -9,6 +9,8 @@ struct VaultApp: App {
     @StateObject private var updates = UpdateManager()
 
     init() {
+        // Before anything reads settings: bring them over from the old bundle id (not for the demo copy).
+        if Bundle.main.bundleIdentifier == AppIdentity.bundleID { LegacyIdentity.migrateDefaults() }
         AppSettings.registerDefaults()
         _ = Licensing.shared  // starts the trial clock on the first launch
         let s = VaultSession()

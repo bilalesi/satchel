@@ -83,10 +83,17 @@ enum NativeMessagingInstaller {
     }
 
     /// At launch: manifests that exist but point elsewhere (the app moved or was updated)
-    /// are rewritten for this copy.
+    /// are rewritten for this copy, and ones left by the old bundle id are replaced.
     static func refreshStalePaths() {
-        for b in Browser.allCases where b.manifestPresent && b.manifestStale {
-            try? install(b)
+        for b in Browser.allCases {
+            // A connection file under the old bundle id: replace it with one under the current id.
+            let legacy = b.manifestDirectory.appendingPathComponent(LegacyIdentity.bundleID + ".json")
+            if !AppIdentity.isIsolatedCopy, FileManager.default.fileExists(atPath: legacy.path) {
+                try? FileManager.default.removeItem(at: legacy)
+                try? install(b)
+            } else if b.manifestPresent && b.manifestStale {
+                try? install(b)
+            }
         }
     }
 }

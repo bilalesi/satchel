@@ -2,7 +2,7 @@
 // Content scripts and the popup send messages here; the page's own URL claims are never
 // trusted, only sender.tab.url from the browser, and only for the top frame.
 
-const HOST = "com.bilalesi.satchel";
+const HOST = "com.ekhodev.satchel";
 const browserAPI = typeof browser !== "undefined" ? browser : chrome;
 
 let port = null;

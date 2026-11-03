@@ -79,10 +79,10 @@ if [ -n "${SIGN_IDENTITY:-}" ]; then
   SIGN=(codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY")
   [ -n "${SIGN_KEYCHAIN:-}" ] && SIGN+=(--keychain "$SIGN_KEYCHAIN")
   for f in "$APP"/Contents/Frameworks/*.framework "$APP/Contents/MacOS/satchel-host"; do "${SIGN[@]}" "$f"; done
-  "${SIGN[@]}" --identifier "com.bilalesi.satchel" --entitlements Resources/Satchel.entitlements "$APP"
+  "${SIGN[@]}" --identifier "com.ekhodev.satchel" --entitlements Resources/Satchel.entitlements "$APP"
 else
   codesign --force --deep --sign - \
-    --identifier "com.bilalesi.satchel" \
+    --identifier "com.ekhodev.satchel" \
     --entitlements Resources/Satchel.entitlements \
     --options runtime \
     "$APP"

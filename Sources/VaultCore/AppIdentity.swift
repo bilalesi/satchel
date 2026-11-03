@@ -4,7 +4,7 @@ import Foundation
 /// Rename here only; nothing else hard-codes these values.
 public enum AppIdentity {
     public static let name = "Satchel"
-    public static let bundleID = "com.bilalesi.satchel"
+    public static let bundleID = "com.ekhodev.satchel"
 
     /// Executable name of the native messaging relay inside the bundle.
     public static let hostExecutableName = "satchel-host"
@@ -54,5 +54,5 @@ public enum AppIdentity {
     public static let purchaseURL = URL(string: "https://satchel.echospace.dev/pricing")!
 
     /// Firefox extension id (`browser_specific_settings.gecko.id`).
-    public static let firefoxExtensionID = "satchel@bilalesi"
+    public static let firefoxExtensionID = "satchel@ekhodev"
 }

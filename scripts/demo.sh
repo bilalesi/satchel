@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ID="com.bilalesi.satchel.demo"
+ID="com.ekhodev.satchel.demo"
 DEMO="$PWD/build/demo"
 APP="$DEMO/Satchel.app"
 

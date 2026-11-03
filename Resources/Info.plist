@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>Satchel</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.bilalesi.satchel</string>
+	<string>com.ekhodev.satchel</string>
 	<key>ATSApplicationFontsPath</key>
 	<string>Fonts</string>
 	<key>CFBundleIconFile</key>
@@ -34,7 +34,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.bilalesi.satchel.activate</string>
+			<string>com.ekhodev.satchel.activate</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>satchel</string>

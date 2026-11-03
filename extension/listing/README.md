@@ -33,9 +33,9 @@ ID never changes again.
 1. Sign in at https://addons.mozilla.org/developers/ (free).
 2. **Submit a new add-on → On this site**, upload the Firefox zip.
 3. "Do you need to submit source code?" **No**: the code is not minified or bundled.
-4. Fill in the listing with the text below. The ID `satchel@bilalesi` is fixed, so the app already accepts it.
+4. Fill in the listing with the text below. The ID `satchel@ekhodev` is fixed, so the app already accepts it.
 
-`npx web-ext lint -s extension/dist/firefox` reported no errors and no warnings on version 0.2.4.
+`npx web-ext lint -s extension/dist/firefox` reported no errors and no warnings on version 0.2.5.
 
 ## Listing text
 

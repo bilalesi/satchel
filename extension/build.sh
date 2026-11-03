@@ -9,4 +9,4 @@ for target in chromium firefox; do
   cp -R src/icons "$out/icons"
   cp "src/manifest.$target.json" "$out/manifest.json"
 done
-echo "extension built: dist/chromium (id $(cat src/.chromium-id)), dist/firefox (satchel@bilalesi)"
+echo "extension built: dist/chromium (id $(cat src/.chromium-id)), dist/firefox (satchel@ekhodev)"
