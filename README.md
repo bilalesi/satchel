@@ -1,8 +1,12 @@
 <div align="center">
 
-<img src="https://satchel.echospace.dev/satchel.png" width="96" height="96" alt="Satchel">
-
-# Satchel
+<p>
+<img src="https://satchel.echospace.dev/satchel.png" width="96" height="96" alt=""><br>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://satchel.echospace.dev/brand/satchel-wordmark-cream.png">
+  <img src="https://satchel.echospace.dev/brand/satchel-wordmark-ink.png" width="157" height="40" alt="Satchel">
+</picture>
+</p>
 
 **A native macOS vault for the secrets developers work with.**<br>
 Encrypted on your Mac. Synced through storage you already own. No account, no Satchel server.
