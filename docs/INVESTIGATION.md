@@ -258,7 +258,7 @@ Swift has no secure string; `String` copies freely. Rules:
 
 ### 6.3 Piracy / licensing
 
-**Dropped (decision 1, §11): personal use only, so no licensing code.** If that changes later: offline Ed25519-signed license keys verified with an embedded public key, never tied to the vault's crypto. Perfect DRM in a native binary is not achievable and must never be allowed to make the vault unreadable.
+**Revived by decision 8 (§11, 2026-11-03).** Free for noncommercial use (PolyForm Noncommercial), paid work license for commercial use, sold per person. Design: offline Ed25519-signed license keys verified with an embedded public key, the same shape as the update signature check, never tied to the vault's crypto. The App Store build, if made, unlocks through StoreKit instead. Perfect DRM in a native binary is not achievable and must never be allowed to make the vault unreadable; a failed check may only hide convenience features. Not built yet.
 
 ### 6.4 Code-signing boundaries (the part that must be right)
 
@@ -403,6 +403,7 @@ Testing per phase: unit tests for crypto round-trips and AAD tampering (must fai
 | 5 | Import/export | Not answered → **deferred**; manual entry first | KDBX/1PUX import can be added without format changes. |
 | 6 | Reference app for look & feel | **Pulse** by egoist (pulse.egoist.dev) | Visual direction captured in §9.1. |
 | 7 | Name and bundle id | **Satchel**, `com.bilalesi.satchel` (chosen 2026-11-02; built as "Vault" until then, migrated on first launch) | App Group, socket, native messaging host name derive from it. |
+| 8 | Distribution, revised (2026-11-03) | **Public source, free for noncommercial use, paid work license for commercial use.** Direct signed build through Paddle with an offline key first; Mac App Store build (sandboxed, fewer features) later if asked for. GitHub Sponsors enabled (`.github/FUNDING.yml`). | Replaces decision 1. §6.3 licensing is back on the plan. Contributions carry a relicensing grant (CONTRIBUTING.md). Terms in `COMMERCIAL.md`. Teams and developer extras stay future options. |
 
 ### 11.1 What "personal use, not in the store" changes
 

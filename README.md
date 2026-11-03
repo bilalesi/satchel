@@ -110,9 +110,16 @@ Contributions are welcome through forks and pull requests. Read [CONTRIBUTING.md
 
 ## License
 
-Satchel is **source-available for noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, study, change and share it for personal use, hobby projects, research, education, and inside charities, schools and public institutions. You may not use it for a commercial purpose, for example at a company for work, or inside a product or service you sell. For commercial use, contact the author through the GitHub profile.
+Satchel is **free for noncommercial use** and **paid for work**.
 
-This is not an "open source" license in the strict sense of the Open Source Initiative, because it limits commercial use. The third-party components keep their own licenses (see below).
+- **Personal and noncommercial use** is covered by the [PolyForm Noncommercial License 1.0.0](LICENSE): use, study, change and share it for yourself, hobby projects, research, education, and inside charities, schools and public institutions.
+- **Commercial use** (at a company for work, or inside a product or service you sell) needs a **work license**, one per person. The terms are in [COMMERCIAL.md](COMMERCIAL.md). Work licenses are not on sale yet; until the buy page exists, ask through the GitHub profile and you will get an answer. The planned flow is a signed direct build bought through Paddle with an offline license key, and a Mac App Store build later.
+
+This is not an "open source" license in the strict sense of the Open Source Initiative, because it limits commercial use. Security is never behind the paywall: the free build encrypts, syncs and fills the same way. The third-party components keep their own licenses (see below).
+
+## Support Satchel
+
+Satchel is built by one person. If it is useful to you, you can [sponsor it on GitHub](https://github.com/sponsors/bilalesi), one-off or monthly. Sponsorship buys nothing: no features, no priority, no commercial rights. It keeps the project going.
 
 ## Credits
 

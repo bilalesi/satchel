@@ -21,7 +21,7 @@ The first run of the check on a new contributor's pull request waits for the mai
 
 ## License of contributions
 
-Satchel is under the [PolyForm Noncommercial License 1.0.0](LICENSE). By submitting a contribution you agree that it is licensed under that same license.
+Satchel is under the [PolyForm Noncommercial License 1.0.0](LICENSE) for noncommercial use, and the maintainer sells a [work license](COMMERCIAL.md) for commercial use. So that one codebase can be shipped under both, by submitting a contribution you confirm that you wrote it or have the right to submit it, and you grant the maintainer a perpetual, worldwide, non-exclusive, royalty-free license to use, change, distribute and sublicense it under any license, including the commercial work license. You keep your copyright. Add `Signed-off-by: Your Name <email>` to each commit (`git commit -s`) to record this.
 
 ## Security problems
 
