@@ -37,6 +37,29 @@ ID never changes again.
 
 `npx web-ext lint -s extension/dist/firefox` reported no errors and no warnings on version 0.2.5.
 
+## 4. Later versions publish themselves
+
+After the first upload to each store, [`extension.yml`](../../.github/workflows/extension.yml) does the rest: a
+push to `main` that changes the `version` in both manifests packs the zips and sends them to the stores, where they
+go through the usual review. A push that leaves the version alone publishes nothing. Both stores refuse a version they
+already have, so nothing is ever published twice. **Run → Extension** in the Actions tab publishes the current version
+by hand.
+
+The workflow needs these secrets in the repository's `release` environment. A store whose secrets are missing is
+skipped with a notice, so set them in any order.
+
+| Secret | Where it comes from |
+|---|---|
+| `CWS_EXTENSION_ID` | The item's ID in the Chrome Web Store dashboard (also `extension/src/.chromium-id` after `set-chrome-key`) |
+| `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN` | A Google Cloud OAuth client for the Chrome Web Store API: follow https://github.com/fregante/chrome-webstore-upload-keys |
+| `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | https://addons.mozilla.org/developers/addon/api/key/ (**Generate new credentials**) |
+
+```bash
+gh secret set CWS_EXTENSION_ID --env release --repo ekhodev/satchel
+```
+
+and the same for each of the others; `gh` asks for the value, so it is never in the shell history.
+
 ## Listing text
 
 **Name:** Satchel

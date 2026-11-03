@@ -197,6 +197,10 @@ build (version `0.1.<commit count>`), Developer ID signing with hardened runtime
 update signature, and an upload to a private Cloudflare R2 bucket. The website serves the download and the update feed
 from there; nothing is published on GitHub. Installed apps verify the size, SHA-256 and signature before installing.
 
+A push that changes the extension's version runs [`extension.yml`](.github/workflows/extension.yml): it packs the
+extension and submits it to the Chrome Web Store and Firefox Add-ons, where it goes through their review. See
+[extension/listing/README.md](extension/listing/README.md).
+
 ## Using Satchel
 
 | | |
