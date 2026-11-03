@@ -4,7 +4,7 @@ Satchel stores secrets, so security reports are taken seriously.
 
 ## Report a vulnerability
 
-Use a **private security advisory**: https://github.com/bilalesi/satchel/security/advisories/new
+Use a **private security advisory**: https://github.com/ekhodev/satchel/security/advisories/new
 
 Please do not open a public issue or pull request for a vulnerability, and do not post details anywhere public before a fix is released. Include what you found, the steps or a proof of concept, the version, and what an attacker gains.
 

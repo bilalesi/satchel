@@ -1,9 +1,9 @@
 // One place for the facts every page repeats. Change a price or a link here only.
 export const site = {
   name: "Satchel",
-  repo: "https://github.com/bilalesi/satchel",
-  download: "https://github.com/bilalesi/satchel/releases/latest",
-  advisories: "https://github.com/bilalesi/satchel/security/advisories/new",
+  repo: "https://github.com/ekhodev/satchel",
+  download: "https://github.com/ekhodev/satchel/releases/latest",
+  advisories: "https://github.com/ekhodev/satchel/security/advisories/new",
   // Empty until checkout is set up: the pricing page then offers the trial only.
   buyUrl: "",
   requirements: "macOS 15 or newer, Apple silicon or Intel",

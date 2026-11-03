@@ -51,7 +51,7 @@ public enum AppIdentity {
     /// Native messaging host name registered in the browsers' manifests.
     public static let nativeHostName = bundleID
     /// Where "Buy" and "Renew" lead. ponytail: the repository until the website and a payment provider are live.
-    public static let purchaseURL = URL(string: "https://github.com/bilalesi/satchel")!
+    public static let purchaseURL = URL(string: "https://github.com/ekhodev/satchel")!
 
     /// Firefox extension id (`browser_specific_settings.gecko.id`).
     public static let firefoxExtensionID = "satchel@bilalesi"

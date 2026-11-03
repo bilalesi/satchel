@@ -52,7 +52,7 @@ def outro():
     paste_icon(img, 'assets/satchel.png', W // 2, 330, 300)
     d = ImageDraw.Draw(img)
     centered(d, 'Free. Open source. Yours.', 560, font(104, 'Bold'), (250, 246, 240))
-    centered(d, 'github.com/bilalesi/satchel', 720, font(58, 'Medium'), (247, 194, 122))
+    centered(d, 'github.com/ekhodev/satchel', 720, font(58, 'Medium'), (247, 194, 122))
     centered(d, 'macOS 15 or later  ·  signed updates', 820, font(40, 'Regular'), (160, 154, 148))
     img.save('card_outro.png')
 

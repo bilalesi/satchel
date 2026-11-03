@@ -113,7 +113,7 @@ ext = card(bg, ext_layers, 3.3, ('zoom', 0.35))
 
 ic2, i2w, i2h = icon_png('assets/satchel.png', 300, 'icon_small')
 o1, o1w, o1h = text_png('Free. Open source. Yours.', 104, 'Bold', (250, 246, 240, 255), 'out_head')
-o2, o2w, o2h = text_png('github.com/bilalesi/satchel', 58, 'Medium', (247, 194, 122, 255), 'out_url')
+o2, o2w, o2h = text_png('github.com/ekhodev/satchel', 58, 'Medium', (247, 194, 122, 255), 'out_url')
 o3, o3w, o3h = text_png('macOS 15 or later  ·  signed updates', 40, 'Regular', (160, 154, 148, 255), 'out_note')
 outro = card(bg, [
     dict(png=ic2, x=(W - i2w) / 2, y=120, t0=0.1, anim='spring', dur=0.8),

@@ -27,7 +27,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>SatchelUpdateRepository</key>
-	<string>bilalesi/satchel</string>
+	<string>ekhodev/satchel</string>
 	<key>SatchelUpdatePublicKey</key>
 	<string></string>
 	<key>SatchelLicensePublicKey</key>
