@@ -36,6 +36,7 @@ struct UpdateIconButton: View {
         switch updates.state {
         case .available, .failed: Task { await updates.download() }
         case .ready: Task { await updates.installAndRelaunch() }
+        case .renew: NSWorkspace.shared.open(AppIdentity.purchaseURL)
         default: break
         }
     }
@@ -52,6 +53,8 @@ struct UpdateIconButton: View {
             case .idle, .checking: return nil
             case .available(let o):
                 icon = .arrowDown; help = "Update available: download Satchel \(o.version)"
+            case .renew(let o):
+                icon = .key; help = "Satchel \(o.version) is out. Your licence's year of updates has ended: renew to get it"
             case .downloading(let o, let p):
                 icon = .arrowDown; progress = p; enabled = false; help = "Downloading Satchel \(o.version): \(Int(p * 100))%"
             case .ready(let o, _):
@@ -61,6 +64,25 @@ struct UpdateIconButton: View {
             case .failed(let m):
                 icon = .warning; failed = true; help = "Update failed: \(m) Click to try again."
             }
+        }
+    }
+}
+
+/// "9 days left" beside the update button while the trial runs; nothing once licensed.
+struct TrialNote: View {
+    @ObservedObject private var licensing = Licensing.shared
+    var open: () -> Void
+
+    var body: some View {
+        if licensing.inTrial {
+            let left = licensing.trial.daysLeft()
+            Button(action: open) {
+                Text(left > 0 ? "\(left) \(left == 1 ? "day" : "days") left" : "Trial ended")
+                    .font(.caption).foregroundStyle(left > 3 ? .secondary : Color.orange)
+            }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .railHint(left > 0 ? "Free trial: every feature is on. Click to add a licence." : "Browser fill and auto-type need a licence. Your items stay open.")
         }
     }
 }

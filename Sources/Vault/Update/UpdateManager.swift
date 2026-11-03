@@ -15,6 +15,8 @@ final class UpdateManager: NSObject, ObservableObject {
         case idle
         case checking
         case available(UpdateOffer)
+        /// Newer than the licence's year of updates: offered as a renewal, never downloaded.
+        case renew(UpdateOffer)
         case downloading(UpdateOffer, Double)
         case ready(UpdateOffer, URL)
         case installing
@@ -125,10 +127,12 @@ final class UpdateManager: NSObject, ObservableObject {
             if status == 404 { state = previousOrIdle(previous); if manual { message = "You're up to date." }; return }
             guard status == 200 else { throw URLError(.badServerResponse) }
             if let offer = UpdateFeed.parse(data, current: currentVersion, repository: repository, allowLocal: allowLocal) {
-                if case .available(let known) = previous, known.version == offer.version {} else {
-                    NotchHUD.shared.show(title: "Update available", detail: "Satchel \(offer.version) is ready to download")
+                let covered = Licensing.shared.covers(offer)
+                if case .available(let known) = previous, known.version == offer.version {} else if case .renew(let known) = previous, known.version == offer.version {} else {
+                    NotchHUD.shared.show(title: covered ? "Update available" : "Satchel \(offer.version) is out",
+                                         detail: covered ? "Satchel \(offer.version) is ready to download" : "Renew your licence for another year of updates")
                 }
-                state = .available(offer)
+                state = covered ? .available(offer) : .renew(offer)
                 Self.log.notice("update available: \(offer.version.description, privacy: .public)")
             } else {
                 state = .idle
@@ -142,8 +146,13 @@ final class UpdateManager: NSObject, ObservableObject {
     }
 
     private func previousOrIdle(_ s: State) -> State {
-        if case .available = s { return s }
-        return .idle
+        switch s { case .available, .renew: return s; default: return .idle }
+    }
+
+    /// After a licence is entered, an offer waiting for renewal may now be covered.
+    func licenseChanged() {
+        if case .renew(let o) = state, Licensing.shared.covers(o) { state = .available(o) }
+        else if case .available(let o) = state, !Licensing.shared.covers(o) { state = .renew(o) }
     }
 
     // MARK: Download

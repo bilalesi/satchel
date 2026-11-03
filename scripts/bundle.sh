@@ -48,6 +48,10 @@ fi
 if [ -s Resources/update-public-key.txt ]; then
   /usr/libexec/PlistBuddy -c "Set :SatchelUpdatePublicKey $(tr -d '[:space:]' < Resources/update-public-key.txt)" "$APP/Contents/Info.plist"
 fi
+# Licences: the public half of the licence signing key (scripts/license-key.swift). Without it nothing is enforced.
+if [ -s Resources/license-public-key.txt ]; then
+  /usr/libexec/PlistBuddy -c "Set :SatchelLicensePublicKey $(tr -d '[:space:]' < Resources/license-public-key.txt)" "$APP/Contents/Info.plist"
+fi
 if [ -n "${UPDATE_REPOSITORY:-}" ]; then
   /usr/libexec/PlistBuddy -c "Set :SatchelUpdateRepository $UPDATE_REPOSITORY" "$APP/Contents/Info.plist"
 fi

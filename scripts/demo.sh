@@ -5,6 +5,7 @@
 #   WAIT=10 scripts/demo.sh    seconds to wait for the window
 #   EXTRA_ENV="A=1 B=2" scripts/demo.sh   extra environment for the app (debug switches)
 #   DEMO_SYNC=1 scripts/demo.sh   Personal already syncs to a folder, Banking kept on this Mac
+#   DEMO_TRIAL_AGO=20 scripts/demo.sh   the trial started 20 days ago (ended); a licence key to paste is in build/demo/license-key.txt
 # Master password of every demo workspace: demo-password-123
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -40,9 +41,16 @@ defaults write "$ID" allowScreenCapture -bool true
 # Two built-in menu entries in a look of the user's own (see MenuLookStore).
 defaults write "$ID" menuLooks -data "$(printf '%s' '{"favorites":{"icon":"satchel.favorites","color":"pink"},"secureNote":{"icon":"satchel.lock","color":"red"}}' | xxd -p -c0)"
 
+# Licences: a throwaway key pair for this copy only, and one key signed with it to paste into Settings → Licence.
+pair=$(swift scripts/license-key.swift generate)
+LICENSE_PUB=$(print -r -- "$pair" | awk '/^public /{print $2}')
+LICENSE_SIGNING_KEY=$(print -r -- "$pair" | awk '/^private /{print $2}') \
+  swift scripts/license-key.swift issue family "$(date -u +%Y-%m-%d)" demo-0001 > "$DEMO/license-key.txt"
+[ -n "${DEMO_TRIAL_AGO:-}" ] && defaults write "$ID" trialStarted -date "$(date -u -v-${DEMO_TRIAL_AGO}d '+%Y-%m-%d %H:%M:%S +0000')"
+
 # 4. Launch, unlocked on the first workspace. Through LaunchServices (`open -n`), so the app is its own
 # process, not a child of this shell: a script run from a tool or terminal can end without taking it along.
-envargs=(--env "SATCHEL_SUPPORT_DIR=$DEMO/support" --env "SATCHEL_DEMO_PASSWORD=demo-password-123")
+envargs=(--env "SATCHEL_SUPPORT_DIR=$DEMO/support" --env "SATCHEL_DEMO_PASSWORD=demo-password-123" --env "SATCHEL_LICENSE_PUBKEY=$LICENSE_PUB")
 for kv in ${=EXTRA_ENV:-}; do envargs+=(--env "$kv"); done
 open -n -a "$APP" "${envargs[@]}"
 sleep "${WAIT:-8}"

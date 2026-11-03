@@ -35,6 +35,8 @@ public struct UpdateOffer: Equatable, Sendable {
     public let dmgURL: URL
     public let signatureURL: URL
     public let size: Int
+    /// GitHub's `published_at`; compared with a licence's update window. Nil when the feed omits it.
+    public var published: Date? = nil
 }
 
 /// Reads GitHub's "latest release" JSON. Only a release for a newer version, with a DMG and a
@@ -66,7 +68,8 @@ public enum UpdateFeed {
         guard let (dmg, size) = asset(wanted), size > 0, size <= maxDownloadBytes, let (sig, _) = asset(wanted + ".sig") else { return nil }
         let page = (obj["html_url"] as? String).flatMap(URL.init) ?? URL(string: "https://github.com/\(repository)/releases")!
         return UpdateOffer(version: version, notes: String((obj["body"] as? String ?? "").prefix(4000)),
-                           pageURL: page, dmgURL: dmg, signatureURL: sig, size: size)
+                           pageURL: page, dmgURL: dmg, signatureURL: sig, size: size,
+                           published: (obj["published_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) })
     }
 }
 

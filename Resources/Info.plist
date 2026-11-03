@@ -30,6 +30,8 @@
 	<string>bilalesi/satchel</string>
 	<key>SatchelUpdatePublicKey</key>
 	<string></string>
+	<key>SatchelLicensePublicKey</key>
+	<string></string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>LSApplicationCategoryType</key>

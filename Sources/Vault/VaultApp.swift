@@ -10,6 +10,7 @@ struct VaultApp: App {
 
     init() {
         AppSettings.registerDefaults()
+        _ = Licensing.shared  // starts the trial clock on the first launch
         let s = VaultSession()
         _session = StateObject(wrappedValue: s)
         AppDelegate.session = s

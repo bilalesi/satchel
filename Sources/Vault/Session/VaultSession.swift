@@ -324,6 +324,7 @@ final class VaultSession: ObservableObject {
     /// Types a field into `app`. Returns an error message to show, or nil on success.
     func typeField(_ field: String, of id: UUID, into app: NSRunningApplication?) async -> String? {
         guard AppSettings.autoTypeEnabled else { return "Auto-type is off. Enable it in Settings → Security." }
+        guard Licensing.shared.conveniencesOn else { return Licensing.endedMessage }
         guard let app else { return AutoTypeError.noTargetApp.errorDescription }
         do {
             let value: String?

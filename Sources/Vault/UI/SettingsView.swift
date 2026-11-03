@@ -4,7 +4,7 @@ import VaultCore
 /// Settings window: one tab per concern (macOS toolbar tabs). Each tab sizes the window to
 /// its own content so short pages don't leave empty space.
 struct SettingsView: View {
-    enum Tab: String, CaseIterable { case general, security, sync, browsers, vault }
+    enum Tab: String, CaseIterable { case general, security, sync, browsers, vault, license }
 
     @AppStorage("settingsTab") private var tab: Tab = .general
 
@@ -25,6 +25,9 @@ struct SettingsView: View {
             VaultSettings()
                 .tabItem { Label { Text("Vault") } icon: { Image(nsImage: Codicon.archive.image()) } }
                 .tag(Tab.vault)
+            LicenseSettings()
+                .tabItem { Label { Text("Licence") } icon: { Image(nsImage: Codicon.key.image()) } }
+                .tag(Tab.license)
         }
         .excludedFromCapture()
     }
@@ -251,6 +254,64 @@ struct VaultSettings: View {
                 LabeledContent("Open source") {
                     PillButton("Licenses", icon: .note, compact: true) {
                         if let url = Bundle.main.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "md") { NSWorkspace.shared.open(url) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: Licence
+
+struct LicenseSettings: View {
+    @EnvironmentObject var updates: UpdateManager
+    @ObservedObject private var licensing = Licensing.shared
+    @State private var key = ""
+    @State private var error: String?
+
+    var body: some View {
+        SettingsPage(height: licensing.license == nil ? 370 : 300) {
+            if !licensing.isEnforced {
+                Section {
+                    Text("Licensing is not set up in this build. Every feature is on.").foregroundStyle(.secondary)
+                }
+            } else if let l = licensing.license {
+                Section("Licence") {
+                    LabeledContent("Plan", value: l.planName)
+                    LabeledContent("Bought", value: l.purchased.formatted(date: .long, time: .omitted))
+                    LabeledContent("Updates until", value: l.updatesUntil.formatted(date: .long, time: .omitted))
+                    LabeledContent("Key", value: l.id)
+                    LabeledContent {
+                        PillButton("Remove", icon: .close, kind: .danger, compact: true) { licensing.remove(); updates.licenseChanged() }
+                    } label: {
+                        Text("Releases after the last day keep being offered as a renewal. The version you have stays yours.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Section("Trial") {
+                    let left = licensing.trial.daysLeft()
+                    LabeledContent("Status", value: left > 0 ? "\(left) \(left == 1 ? "day" : "days") left" : "Ended")
+                    Text(left > 0
+                         ? "Every feature is on during the trial. Your vault never depends on a licence."
+                         : "Your vault stays open: unlock, read, copy and edit every item. Browser fill and auto-type need a licence.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                Section("Licence key") {
+                    TextField("SATCHEL-…", text: $key, axis: .vertical)
+                        .font(.system(size: 11, design: .monospaced)).lineLimit(3...4).labelsHidden()
+                    LabeledContent {
+                        HStack {
+                            PillButton("Buy", icon: .linkExternal, compact: true) { NSWorkspace.shared.open(AppIdentity.purchaseURL) }
+                            PillButton("Activate", icon: .key, kind: .primary, compact: true) {
+                                if licensing.activate(key) { key = ""; error = nil; updates.licenseChanged() }
+                                else { error = "This key is not valid. Paste it exactly as you received it." }
+                            }
+                            .disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    } label: {
+                        if let error { Text(error).font(.callout).foregroundStyle(.red) }
+                        else { Text("Checked on this Mac. Nothing is sent anywhere.").font(.callout).foregroundStyle(.secondary) }
                     }
                 }
             }

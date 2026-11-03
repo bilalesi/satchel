@@ -16,6 +16,7 @@ final class BridgeHandler {
         guard let origin = req.origin, BrowserIntegration.allowedOrigins.contains(origin) else {
             return .failure(req.id, "origin_not_allowed")
         }
+        if Self.licensed.contains(req.type), !Licensing.shared.conveniencesOn { return .failure(req.id, "trial_ended") }
         switch req.type {
         case "hello", "status":
             return status(req.id)
@@ -111,6 +112,9 @@ final class BridgeHandler {
             return .failure(req.id, "unknown_type")
         }
     }
+
+    /// Requests that pause after the trial without a licence. Status, unlock, lock and open always answer.
+    private static let licensed: Set<String> = ["match", "fill", "save", "search", "copy", "code", "generate"]
 
     private func status(_ id: Int) -> BridgeResponse {
         var r = BridgeResponse(id: id)

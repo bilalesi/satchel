@@ -302,7 +302,10 @@ struct SidebarFooter: View {
             .background(AnchorReader(box: anchor))
             .railHint(syncHelp)
             .accessibilityLabel("\(AppIdentity.name) menu")
-            if !vertical { Spacer() }
+            if !vertical {
+                Spacer()
+                TrialNote { openSettingsTab(.license) }
+            }
             UpdateIconButton()
             Button { openSettingsTab(nil) } label: { Icon(.settingsGear, size: 14) }
                 .buttonStyle(CircleButtonStyle(kind: .ghost, diameter: 28))
