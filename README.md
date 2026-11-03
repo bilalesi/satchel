@@ -107,7 +107,7 @@ Contributions are welcome through forks and pull requests. Read [CONTRIBUTING.md
 
 ## License
 
-Satchel is paid software with public source. Try every feature free for 7 days, then buy it once for $29 at [satchel.echospace.dev/pricing](https://satchel.echospace.dev/pricing), for one person on their own Macs.
+Satchel is paid software with public source. Try every feature free for 7 days, then buy it once for €20 plus checkout fees, with tax added at checkout, at [satchel.echospace.dev/pricing](https://satchel.echospace.dev/pricing). One plan, for one person on their own Macs.
 
 Each licence includes a year of updates, and you keep the last version from that year for good. Renewing is optional. There is no subscription and no account: the licence is a key checked on your Mac.
 

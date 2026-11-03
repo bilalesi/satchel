@@ -258,7 +258,7 @@ Swift has no secure string; `String` copies freely. Rules:
 
 ### 6.3 Piracy / licensing
 
-**Built (decision 9, §11, 2026-11-03; commit dde2655).** Pay once for everyone: Satchel $29 (one person), Family $49 (5 Macs), 14-day trial, one year of updates, the last version from that year kept for good.
+**Built (decision 9, §11, 2026-11-03; commit dde2655).** Pay once for everyone: Satchel $29 (one person), Family $49 (5 Macs), 14-day trial (changed the same day: one plan at €20 plus checkout fees and tax, 7-day trial, see decision 9), one year of updates, the last version from that year kept for good.
 
 - **Keys:** `SATCHEL-<payload>.<signature>`, base64url. Payload `1|<single|family>|<purchase yyyy-MM-dd>|<id>`, Ed25519 over its exact bytes, checked against the public key in `Info.plist` (`SatchelLicensePublicKey`, from `Resources/license-public-key.txt`). Same verify code as update signatures (`UpdateSignature`), its own key pair. Issued with `scripts/license-key.swift`; the private key stays out of the repo. Code: `Sources/VaultCore/Licensing/License.swift`.
 - **Trial:** start date in UserDefaults, outside the vault. Resetting defaults or setting the clock back restarts or extends it; accepted, because perfect DRM in a native binary is not achievable.
@@ -411,7 +411,7 @@ Testing per phase: unit tests for crypto round-trips and AAD tampering (must fai
 | 6 | Reference app for look & feel | **Pulse** by egoist (pulse.egoist.dev) | Visual direction captured in §9.1. |
 | 7 | Name and bundle id | **Satchel**, `com.bilalesi.satchel` (chosen 2026-11-02; built as "Vault" until then, migrated on first launch) | App Group, socket, native messaging host name derive from it. |
 | 8 | Distribution, revised (2026-11-03), **replaced by 9** | **Public source, free for noncommercial use, paid work license for commercial use.** Direct signed build through Paddle with an offline key first; Mac App Store build (sandboxed, fewer features) later if asked for. GitHub Sponsors enabled (`.github/FUNDING.yml`). | Replaces decision 1. §6.3 licensing is back on the plan. Contributions carry a relicensing grant (CONTRIBUTING.md). Terms in `COMMERCIAL.md`. Teams and developer extras stay future options. |
-| 9 | Business model (2026-11-03) | **Pay once for everyone:** Satchel $29, Family $49 for 5 Macs, 14-day trial, a year of updates, keep the last version. Public source, all rights reserved (`LICENSE`). | Replaces the free-noncommercial part of decision 8. `COMMERCIAL.md` and GitHub Sponsors removed. Licensing built (§6.3). Payment provider not chosen yet. |
+| 9 | Business model (2026-11-03) | **Pay once for everyone:** one plan, Satchel, €20 plus checkout fees (tax added at checkout), 7-day trial (first set at $29, Family $49, 14 days), a year of updates, keep the last version. Public source, all rights reserved (`LICENSE`). | Replaces the free-noncommercial part of decision 8. `COMMERCIAL.md` and GitHub Sponsors removed. Licensing built (§6.3). Payment provider not chosen yet. |
 
 ### 11.1 What "personal use, not in the store" changes
 
