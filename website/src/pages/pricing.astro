@@ -1,0 +1,124 @@
+---
+import Base from "../layouts/Base.astro";
+import { site } from "../site";
+
+const included = [
+  "Every feature: browser fill, Quick Access, auto-type, workspaces, Touch ID",
+  "Every sync method: folder, GitHub, git, WebDAV, S3",
+  "All your Macs",
+  "A year of updates, then keep your version for good",
+];
+
+// "Pay once" told as what actually happens, in order.
+const steps = [
+  { when: "Today", what: "Download Satchel", detail: "Every feature, no account, no card." },
+  { when: `Day ${site.trialDays}`, what: "Buy it once", detail: `${site.price} ${site.fees}. Paste the key you get into the app.` },
+  { when: "Year one", what: "Updates included", detail: "Every new version that year is yours." },
+  { when: "After that", what: "Keep it", detail: "Your version keeps working. Another year of updates is up to you." },
+];
+
+const faq = [
+  ["What are the checkout fees?", "Card processing and, where it applies, sales tax or VAT. They're calculated for your country and shown before you pay."],
+  ["What happens when the trial ends?", "Your vault stays readable, always. Licensing never touches encryption, so you can still open and copy every item."],
+  ["Is there a subscription?", "No. Satchel runs no servers for your data, so there's nothing to rent."],
+  ["Do I need an account?", "No. Your licence is a key you paste into the app. It is checked on your Mac, offline."],
+];
+
+const buying = Boolean(site.buyUrl);
+---
+
+<Base title="Pricing, Satchel" description={`Try Satchel free for ${site.trialDays} days, then pay once: ${site.price} ${site.fees}. No subscription, no account.`}>
+  <section class="head wrap">
+    <h1>One price. Yours to keep.</h1>
+    <p class="lede">No subscription and no account. Try everything for {site.trialDays} days, then pay once.</p>
+  </section>
+
+  <section class="wrap">
+    <article class="plan pocket">
+      <div class="price-row">
+        <p class="price">{site.price}</p>
+        <p class="price-note"><span>{site.fees}</span><span class="muted">one time</span></p>
+      </div>
+      <ul class="incl">{included.map((x) => <li>{x}</li>)}</ul>
+      <div class="actions">
+        {buying
+          ? <a class="btn btn-primary" href={site.buyUrl}>Buy Satchel</a>
+          : <a class="btn btn-primary" href={site.download}>Download the {site.trialDays}-day trial</a>}
+      </div>
+      <p class="small muted">{site.requirements}.{!buying && " Licences go on sale with the first licensed release; until then the download is free."}</p>
+    </article>
+  </section>
+
+  <section class="section wrap">
+    <h2 class="sub">What paying once means</h2>
+    <ol class="timeline">
+      {steps.map((s) => (
+        <li>
+          <span class="when">{s.when}</span>
+          <h3>{s.what}</h3>
+          <p class="muted">{s.detail}</p>
+        </li>
+      ))}
+    </ol>
+  </section>
+
+  <section class="section wrap faq">
+    <h2 class="sub">Questions</h2>
+    <div class="qs">
+      {faq.map(([q, a]) => (
+        <details>
+          <summary>{q}</summary>
+          <p class="muted">{a}</p>
+        </details>
+      ))}
+    </div>
+  </section>
+</Base>
+
+<style>
+  .head { display: grid; gap: 16px; justify-items: center; text-align: center; padding-block: clamp(32px, 6vw, 72px) clamp(28px, 4vw, 48px); }
+  .head .lede { max-width: 44ch; }
+
+  .plan { max-width: 560px; margin-inline: auto; display: grid; gap: 24px; padding: clamp(32px, 5vw, 48px); background: var(--mist); outline-color: transparent; }
+  .price-row { display: flex; align-items: flex-end; gap: 14px; }
+  .price { font-size: clamp(3.5rem, 8vw, 4.5rem); font-weight: 600; letter-spacing: -0.04em; line-height: 0.9; }
+  .price-note { display: grid; font-size: 0.9375rem; line-height: 1.35; font-weight: 500; }
+  .incl { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .incl li { position: relative; padding-left: 26px; }
+  .incl li::before {
+    content: ""; position: absolute; left: 2px; top: 0.5em; width: 10px; height: 5px;
+    border-left: 1.5px solid var(--pine); border-bottom: 1.5px solid var(--pine); transform: rotate(-45deg);
+  }
+
+  .sub { margin-bottom: 36px; }
+
+  /* timeline: a real sequence, joined by the stitch */
+  .timeline { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; position: relative; }
+  .timeline::before { content: ""; position: absolute; top: 6px; left: 8px; right: 8px; border-top: 1.5px dashed var(--stitch); }
+  .timeline li { position: relative; display: grid; gap: 6px; align-content: start; padding-top: 30px; }
+  .timeline li::before {
+    content: ""; position: absolute; top: 0; left: 0; width: 13px; height: 13px; border-radius: 50%;
+    background: var(--mist); border: 1.5px solid var(--pine);
+  }
+  .timeline li:nth-child(2)::before { background: var(--saffron); border-color: var(--saffron); }
+  .when { font-size: 0.875rem; font-weight: 600; color: var(--saffron-ink); }
+  .timeline p { font-size: 0.9375rem; }
+
+  .faq { display: grid; grid-template-columns: 1fr 2fr; gap: 32px; padding-top: 0; }
+  .faq .sub { margin: 0; }
+  .qs { display: grid; border-top: 1px solid var(--line); }
+  details { border-bottom: 1px solid var(--line); }
+  summary { cursor: pointer; padding: 18px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; font-size: 1.3rem; line-height: 1; font-weight: 400; color: var(--moss); transition: transform 0.2s; }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { padding-bottom: 20px; }
+
+  @media (max-width: 760px) {
+    .timeline { grid-template-columns: 1fr; gap: 24px; padding-left: 30px; }
+    .timeline::before { top: 8px; bottom: 8px; left: 6px; right: auto; border-top: 0; border-left: 1.5px dashed var(--stitch); }
+    .timeline li { padding-top: 0; }
+    .timeline li::before { left: -30px; top: 4px; }
+    .faq { grid-template-columns: 1fr; }
+  }
+</style>
