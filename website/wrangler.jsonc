@@ -1,0 +1,16 @@
+{
+  // Cloudflare Workers with static assets: no server code, only the files in dist/.
+  // Static asset requests are free and unlimited on the Workers free plan.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "satchel-website",
+  "compatibility_date": "2026-11-03",
+  "workers_dev": true,
+  "preview_urls": false,
+  // Needs the echospace.dev zone active in the same Cloudflare account; `bun run setup` gets it there.
+  "routes": [{ "pattern": "satchel.echospace.dev", "custom_domain": true }],
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

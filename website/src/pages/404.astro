@@ -1,0 +1,15 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Page not found, Satchel" description="This page does not exist.">
+  <section class="wrap nf">
+    <h1>This page isn't here.</h1>
+    <p class="lede">The link may be old, or the address mistyped.</p>
+    <div class="actions"><a class="btn btn-primary" href="/">Go to the home page</a></div>
+  </section>
+</Base>
+
+<style>
+  .nf { display: grid; justify-items: center; gap: 18px; text-align: center; padding-block: clamp(80px, 14vw, 160px); }
+</style>
