@@ -110,16 +110,14 @@ Contributions are welcome through forks and pull requests. Read [CONTRIBUTING.md
 
 ## License
 
-Satchel is **free for noncommercial use** and **paid for work**.
+Satchel is paid software with public source. Try every feature free for 14 days, then buy it once:
 
-- **Personal and noncommercial use** is covered by the [PolyForm Noncommercial License 1.0.0](LICENSE): use, study, change and share it for yourself, hobby projects, research, education, and inside charities, schools and public institutions.
-- **Commercial use** (at a company for work, or inside a product or service you sell) needs a **work license**, one per person. The terms are in [COMMERCIAL.md](COMMERCIAL.md). Work licenses are not on sale yet; until the buy page exists, ask through the GitHub profile and you will get an answer. The planned flow is a signed direct build bought through Paddle with an offline license key, and a Mac App Store build later.
+- **Satchel, $29:** one person, on their own Macs.
+- **Family, $49:** one household, up to 5 Macs.
 
-This is not an "open source" license in the strict sense of the Open Source Initiative, because it limits commercial use. Security is never behind the paywall: the free build encrypts, syncs and fills the same way. The third-party components keep their own licenses (see below).
+Each licence includes a year of updates, and you keep the last version from that year for good. Renewing is optional. There is no subscription and no account: the licence is a key you paste into Settings → Licence, checked on your Mac. Licences are not on sale yet; until the buy page exists, ask through the GitHub profile.
 
-## Support Satchel
-
-Satchel is built by one person. If it is useful to you, you can [sponsor it on GitHub](https://github.com/sponsors/bilalesi), one-off or monthly. Sponsorship buys nothing: no features, no priority, no commercial rights. It keeps the project going.
+The code is public so you can audit it; the terms are in [LICENSE](LICENSE). Security is never behind the paywall, and no licence state ever makes your vault unreadable: after the trial you can still unlock Satchel and open and copy every item. The third-party components keep their own licenses (see below).
 
 ## Credits
 

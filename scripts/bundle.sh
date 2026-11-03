@@ -70,7 +70,7 @@ fi
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # Codicon font (loaded by macOS through ATSApplicationFontsPath = Fonts) and its CC BY 4.0 license.
 cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
-cp THIRD_PARTY_NOTICES.md LICENSE COMMERCIAL.md "$APP/Contents/Resources/"
+cp THIRD_PARTY_NOTICES.md LICENSE "$APP/Contents/Resources/"
 
 # Ad-hoc signature with hardened runtime. Entitlements are deliberately empty: no sandbox
 # (auto-type later), no library-validation bypass, no dyld env vars, no get-task-allow. A stable identifier keeps the designated
