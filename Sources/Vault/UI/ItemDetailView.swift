@@ -111,6 +111,14 @@ struct ItemDetailView: View {
 
     private static let seedInfo = AuthenticatorHelp.stored
 
+    /// Said when codes are corrected for a drifting clock, so a code that differs from a phone's is explained.
+    static var skewNote: String? {
+        let off = ClockSkew.offset
+        guard off != 0 else { return nil }
+        let s = Int(abs(off).rounded())
+        return "Corrected for this Mac's clock, which is \(s) s \(off > 0 ? "slow" : "fast"). Turn on Set time and date automatically in System Settings → General → Date & Time."
+    }
+
     /// Fixed mask length: the dots never reveal how long a secret is.
     private static let mask = String(repeating: "•", count: 12)
 
@@ -159,8 +167,9 @@ struct ItemDetailView: View {
     /// Live one-time code with a countdown; copy puts the code (not the seed) on the clipboard.
     private func oneTimeCodeRow(_ totp: TOTP) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            let code = totp.code(at: ctx.date)
-            let left = totp.secondsRemaining(at: ctx.date)
+            let real = ClockSkew.corrected(ctx.date)
+            let code = totp.code(at: real)
+            let left = totp.secondsRemaining(at: real)
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("One-time code").font(Theme.caption).foregroundStyle(.secondary)
@@ -176,6 +185,9 @@ struct ItemDetailView: View {
                             Text("\(left)").font(.system(size: 9, weight: .semibold)).monospacedDigit()
                         }
                         .frame(width: 24, height: 24)
+                    }
+                    if let note = Self.skewNote {
+                        Text(note).font(Theme.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer()

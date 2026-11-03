@@ -90,7 +90,7 @@ final class BridgeHandler {
             }
             var r = status(req.id)
             r.code = totp.code()
-            r.remaining = totp.period - Int(Date().timeIntervalSince1970) % totp.period
+            r.remaining = totp.secondsRemaining()
             return r
         case "lock":
             session.lock()

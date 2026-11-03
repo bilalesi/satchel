@@ -59,7 +59,8 @@ public struct TOTP: Equatable, Sendable {
         return Label(issuer: issuer?.isEmpty == true ? nil : issuer, account: account?.isEmpty == true ? nil : account)
     }
 
-    public func code(at date: Date = Date()) -> String {
+    /// The code at a moment; by default now on real time (`ClockSkew`), so a drifting Mac clock still gives the site's code.
+    public func code(at date: Date = ClockSkew.now) -> String {
         let counter = UInt64(max(0, date.timeIntervalSince1970)) / UInt64(period)
         var be = counter.bigEndian
         let msg = Data(bytes: &be, count: 8)
@@ -80,7 +81,7 @@ public struct TOTP: Equatable, Sendable {
     }
 
     /// Seconds until the current code changes.
-    public func secondsRemaining(at date: Date = Date()) -> Int {
+    public func secondsRemaining(at date: Date = ClockSkew.now) -> Int {
         period - Int(date.timeIntervalSince1970) % period
     }
 

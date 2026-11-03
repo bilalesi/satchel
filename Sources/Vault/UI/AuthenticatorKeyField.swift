@@ -16,7 +16,9 @@ struct AuthenticatorKeyField: View {
     /// Called with the service and account found in a QR code, so an empty title can be filled in.
     var onImported: (TOTP.Label?) -> Void
 
+    @EnvironmentObject private var session: VaultSession
     @State private var revealed = false
+    @State private var copiedCode = false
     @State private var status: Status?
     @State private var dropping = false
 
@@ -62,14 +64,21 @@ struct AuthenticatorKeyField: View {
             EmptyView()
         } else if let totp = TOTP(trimmed) {
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                let code = totp.code(at: ctx.date)
+                let real = ClockSkew.corrected(ctx.date)
+                let code = totp.code(at: real)
                 HStack(spacing: Theme.Space.s) {
                     Text("Code now").font(Theme.caption).foregroundStyle(.secondary)
                     Text(code.count == 6 ? code.prefix(3) + " " + code.suffix(3) : code)
                         .font(.system(size: 15, weight: .medium)).monospacedDigit()
-                    Text("· \(totp.secondsRemaining(at: ctx.date))s").font(Theme.caption).foregroundStyle(.secondary).monospacedDigit()
+                    Text("· \(totp.secondsRemaining(at: real))s").font(Theme.caption).foregroundStyle(.secondary).monospacedDigit()
                     Spacer(minLength: 0)
                     if let status, status.good { Text(status.text).font(Theme.caption).foregroundStyle(.green) }
+                    IconButton(copiedCode ? .check : .copy, help: copiedCode ? "Copied" : "Copy one-time code", diameter: 24) {
+                        session.copy(code)
+                        copiedCode = true
+                        Task { try? await Task.sleep(for: .seconds(1.5)); copiedCode = false }
+                    }
+                    .foregroundStyle(copiedCode ? Color.green : Color.secondary)
                 }
             }
             Text("It should match the code the site or your authenticator app shows right now.")

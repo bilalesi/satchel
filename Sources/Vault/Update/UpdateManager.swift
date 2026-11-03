@@ -118,8 +118,15 @@ final class UpdateManager: NSObject, ObservableObject {
             req.setValue("application/json", forHTTPHeaderField: "Accept")
             req.setValue("\(AppIdentity.name)/\(currentVersion)", forHTTPHeaderField: "User-Agent")
             req.timeoutInterval = 20
+            let sent = Date()
             let (data, resp) = try await session.data(for: req)
-            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            let http = resp as? HTTPURLResponse
+            // The same answer says what time it is: one-time codes correct for a drifting clock with it.
+            if let skew = ClockSkew.record(dateHeader: http?.value(forHTTPHeaderField: "Date"), age: http?.value(forHTTPHeaderField: "Age"),
+                                           sent: sent, received: Date()), skew != 0 {
+                Self.log.notice("clock is off by \(skew, format: .fixed(precision: 1), privacy: .public) s; one-time codes corrected")
+            }
+            let status = http?.statusCode ?? 0
             if status == 404 { state = previousOrIdle(previous); if manual { message = "You're up to date." }; return }
             guard status == 200 else { throw URLError(.badServerResponse) }
             if let offer = UpdateFeed.parse(data, current: currentVersion, allowLocal: allowLocal) {
