@@ -26,7 +26,7 @@ public struct GitHubRepo: Codable, Equatable, Hashable, Sendable {
 public final class GitHubStore: RemoteStore {
     public let repo: GitHubRepo
     private let token: String
-    private let session: URLSession
+    private let http: HTTPClient
     private let api = URL(string: "https://api.github.com")!
 
     public var displayName: String { "GitHub " + repo.fullName }
@@ -34,7 +34,7 @@ public final class GitHubStore: RemoteStore {
     public init(repo: GitHubRepo, token: String, session: URLSession = SyncNetwork.session) {
         self.repo = repo
         self.token = token
-        self.session = session
+        http = HTTPClient(session: session, category: "github")
     }
 
     // MARK: RemoteStore
@@ -187,22 +187,14 @@ public final class GitHubStore: RemoteStore {
 
     private static let log = Logger(subsystem: AppIdentity.bundleID, category: "github")
 
-    /// Logs method, path and status only: never the token, never bodies.
+    /// Through HTTPClient like the other backends: no redirects (the bearer token must not follow
+    /// a 3xx off api.github.com) and the 64 MiB body cap. Logs GitHub's error message, never the token.
     private func send(_ req: URLRequest) async throws -> (Data, Int) {
-        let what = "\(req.httpMethod ?? "?") \(req.url?.path ?? "?")"
-        do {
-            let (data, resp) = try await session.data(for: req)
-            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
-            if status >= 400 {
-                Self.log.error("\(what, privacy: .public) → \(status) \(self.message(data), privacy: .public)")
-            } else {
-                Self.log.info("\(what, privacy: .public) → \(status)")
-            }
-            return (data, status)
-        } catch {
-            Self.log.error("\(what, privacy: .public) → network error \(error.localizedDescription, privacy: .public)")
-            throw SyncError.network(error.localizedDescription)
+        let (data, resp) = try await http.send(req)
+        if resp.statusCode >= 400 {
+            Self.log.error("\(req.url?.path ?? "?", privacy: .public) → \(self.message(data), privacy: .public)")
         }
+        return (data, resp.statusCode)
     }
 
     private func check(_ status: Int, _ data: Data) throws {

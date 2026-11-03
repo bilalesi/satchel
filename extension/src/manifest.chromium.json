@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Satchel",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Fill logins from your local Satchel vault.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyS/HPTdBEaqbL+CoJCB8LdohdY2dxZ4PQUH9Jolw96hz9rBN4t98itjhkkBHzCdr5TjIU+3gACFVOVEhhzXDNpIBAIsEWVcwNb73tZMsoqCEJHlFC+U0xA9nqfYoyJHEhHRILl7GKUDCLtM2TV5oUN9cEICoKwE37cLB7diMHjBYnwVdpdDu2jFqS7IHKgEtXmJEzgsO/NyFTKgEtDXbdRVzoR7r53AfxoPVEoHBLmXomRPfv3wXlZdbXQie1rWIPQBPYWs4KvUFBvCe9CCN5g44WCm/tICnLCYtEdf4jpE1zqHcddUni+E08Cp323o4o/zGGQeOW9lebjLaI7TRXQIDAQAB",
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },

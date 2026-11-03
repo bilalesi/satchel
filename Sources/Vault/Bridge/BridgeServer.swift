@@ -24,13 +24,13 @@ final class BridgeServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: AppIdentity.bundleID + ".bridge")
     private let acceptSource: DispatchSourceRead
     private let handler: Handler
-    private let bundlePath: String
+    private let hostPath: String
 
     init(socketURL: URL = AppIdentity.bridgeSocketURL, handler: @escaping Handler) throws {
         try FileManager.default.createDirectory(at: socketURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         fd = try UnixSocket.listen(path: socketURL.path)
         self.handler = handler
-        bundlePath = Bundle.main.bundleURL.resolvingSymlinksInPath().path
+        hostPath = BrowserIntegration.hostBinaryURL.resolvingSymlinksInPath().path
         acceptSource = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         acceptSource.setEventHandler { [weak self] in self?.acceptPending() }
         acceptSource.resume()
@@ -50,8 +50,7 @@ final class BridgeServer: @unchecked Sendable {
 
     private func peerAllowed(_ client: Int32) -> Bool {
         guard let pid = UnixSocket.peerPID(client), let path = UnixSocket.executablePath(of: pid) else { return false }
-        let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-        guard resolved.hasPrefix(bundlePath + "/"), resolved.hasSuffix("/" + AppIdentity.hostExecutableName) else { return false }
+        guard URL(fileURLWithPath: path).resolvingSymlinksInPath().path == hostPath else { return false }
         // The isolated debug copy is driven by scripts/bridge-smoke.sh, which spawns the host itself.
         if AppIdentity.isIsolatedCopy { return true }
         guard let parent = UnixSocket.parentPID(of: pid), parent > 1 else { return false }
@@ -77,8 +76,10 @@ final class BridgeServer: @unchecked Sendable {
             let n = read(client, &buf, buf.count)
             if n <= 0 { source.cancel(); return }
             state.decoder.append(Data(buf[0..<n]))
-            while let frame = (try? state.decoder.next()) ?? nil {
-                self.dispatch(frame, to: client, state: state)
+            do {
+                while let frame = try state.decoder.next() { self.dispatch(frame, to: client, state: state) }
+            } catch {
+                source.cancel() // an oversized frame never completes: dropping the peer bounds the buffer
             }
         }
         source.setCancelHandler { close(client) }

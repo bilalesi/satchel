@@ -27,6 +27,9 @@
     for (let n = el; n && n !== document.documentElement; n = parentOf(n)) {
       const cs = getComputedStyle(n);
       if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) < 0.5) return false;
+      // filter: opacity(0), a heavy blur or an SVG filter, a mask or a blend mode hide an element that
+      // still takes hits. Other filters (drop-shadow, brightness, grayscale) leave it readable.
+      if (/\b(opacity|blur|url)\(/.test(cs.filter) || (cs.maskImage || "none") !== "none" || cs.mixBlendMode !== "normal") return false;
     }
     const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
     for (let n = el; n; n = parentOf(n)) if (n === hit) return true;
@@ -78,8 +81,26 @@
   }
 
   let watch = null;
+  let seen = null;
+  // IntersectionObserver v2 (Chromium): the menu is painted unoccluded, undistorted. true, false, or
+  // undefined where unsupported (Firefox) — then the checks in intact() are all there is.
+  let boxVisible;
+
+  // The browser's compositor says whether anything — a page popover in its own shadow root, a
+  // filter, a transform — hides the menu; the DOM checks in intact() cannot see all of those.
+  // ponytail: the observer reports no sooner than `delay` after a change, so an overlay shown
+  // under 100 ms before the user's press is not caught; the observer cannot run faster.
+  function watchVisibility(box) {
+    boxVisible = undefined;
+    if (!("isVisible" in IntersectionObserverEntry.prototype)) return;
+    seen = new IntersectionObserver((entries) => {
+      for (const e of entries) { boxVisible = e.isVisible; if (!e.isVisible) closeDropdown(); }
+    }, { trackVisibility: true, delay: 100 });
+    seen.observe(box);
+  }
 
   function closeDropdown() {
+    if (seen) { seen.disconnect(); seen = null; }
     if (watch) { watch.disconnect(); watch = null; }
     if (dropdown) { dropdown.remove(); dropdown = null; }
     activeField = null;
@@ -201,13 +222,14 @@
     // still closes the menu before the mousedown that would pick.
     watch = new MutationObserver(closeDropdown);
     watch.observe(host, { attributes: true });
+    watchVisibility(box);
   }
 
   // Checked right before a fill: the menu is ours, still open in the top layer, fully opaque,
   // and nothing the page put in the top layer after it can sit on top of it.
   function intact() {
     const host = dropdown;
-    if (!host || !host.isConnected || !host.matches(":popover-open")) return false;
+    if (!host || !host.isConnected || !host.matches(":popover-open") || boxVisible === false) return false;
     const cs = getComputedStyle(host);
     if (cs.opacity !== "1" || cs.visibility !== "visible" || cs.filter !== "none" || cs.mixBlendMode !== "normal") return false;
     // ponytail: a top-layer element inside the page's own shadow root is not seen here; IntersectionObserver v2

@@ -45,7 +45,7 @@ func readFrame(_ fd: Int32) -> Data? {
     var decoder = NativeMessageFraming.Decoder()
     var buf = [UInt8](repeating: 0, count: 65536)
     while true {
-        if let msg = try? decoder.next() { return msg }
+        do { if let msg = try decoder.next() { return msg } } catch { return nil } // oversized frame: drop the app connection
         let n = read(fd, &buf, buf.count)
         if n <= 0 { return nil }
         decoder.append(Data(buf[0..<n]))
@@ -67,7 +67,8 @@ let stdinHandle = FileHandle.standardInput
 while true {
     var request: Data?
     while request == nil {
-        if let m = try? stdinDecoder.next() { request = m; break }
+        // Browsers cap a message at 1 MiB: anything larger is not a browser, and the frame would never complete.
+        do { if let m = try stdinDecoder.next() { request = m; break } } catch { exit(1) }
         let chunk = stdinHandle.availableData
         if chunk.isEmpty { exit(0) } // browser closed the port
         stdinDecoder.append(chunk)
