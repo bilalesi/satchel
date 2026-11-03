@@ -8,7 +8,7 @@
  *   3. DNS: copies every record from Vercel, and adds records for the Vercel projects that serve
  *      DOMAIN or its subdomains, so those sites keep working after the move
  *   4. Vercel: points DOMAIN's nameservers to Cloudflare (asks first)
- *   5. GitHub: stores the Cloudflare secrets, so every push to main that changes website/ deploys
+ *   5. GitHub: stores the Cloudflare secrets, so every push or merge to main deploys
  *      through .github/workflows/website.yml
  *   6. Deploy: builds and deploys now; on SUBDOMAIN.DOMAIN once the zone is active, on workers.dev before
  *
@@ -262,7 +262,7 @@ if (zone.status !== 'active') {
 log.step(`GitHub secrets for ${repo}`);
 await run(['gh', 'secret', 'set', 'CLOUDFLARE_API_TOKEN', '--repo', repo], { stdin: CF_TOKEN });
 await run(['gh', 'secret', 'set', 'CLOUDFLARE_ACCOUNT_ID', '--repo', repo], { stdin: CF_ACCOUNT });
-log.ok('Saved CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: pushes to main that change website/ deploy');
+log.ok('Saved CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: every push or merge to main deploys');
 
 /* ---------- 6. build and deploy ---------- */
 
@@ -293,5 +293,5 @@ console.log(`
   Worker       https://dash.cloudflare.com/${CF_ACCOUNT}/workers/services/view/${WORKER}/production
   Deploys      https://github.com/${repo}/actions/workflows/website.yml
 
-From now on: edit website/, commit, push to main. The site updates in about a minute.
+From now on: every merge to main deploys. The site updates in about a minute.
 `);

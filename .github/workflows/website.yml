@@ -1,13 +1,10 @@
 name: Website
 
 # Builds the site in website/ and deploys it to Cloudflare (satchel.echospace.dev).
-# Only pushes to main that change the site go live; the app's own pipelines ignore website/.
+# Every merge or push to main deploys. Cheap: unchanged files are not uploaded again.
 on:
   push:
     branches: [main]
-    paths:
-      - "website/**"
-      - ".github/workflows/website.yml"
   workflow_dispatch:
 
 permissions:
@@ -27,9 +24,10 @@ jobs:
     env:
       ASTRO_TELEMETRY_DISABLED: 1
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Astro needs a newer Node.js than the one preinstalled on the runner.
-      - uses: actions/setup-node@v5
+      # Actions are pinned to a commit: the repository refuses unpinned ones.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
