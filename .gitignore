@@ -12,3 +12,4 @@ extension/dist/
 
 # The website is its own private repository (ekhodev/satchel-website), checked out here.
 /website/
+extension/store/

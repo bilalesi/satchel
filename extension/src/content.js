@@ -208,7 +208,12 @@
       });
       const foot = document.createElement("div");
       foot.className = "foot";
-      foot.innerHTML = "<span><kbd>↑</kbd> <kbd>↓</kbd> <kbd>↵</kbd></span><span><kbd>Esc</kbd> closes</span>";
+      const kbd = (k) => { const e = document.createElement("kbd"); e.textContent = k; return e; };
+      const keys = document.createElement("span");
+      keys.append(kbd("↑"), " ", kbd("↓"), " ", kbd("↵"));
+      const esc = document.createElement("span");
+      esc.append(kbd("Esc"), " closes");
+      foot.append(keys, esc);
       box.appendChild(foot);
     }
     root.appendChild(style);

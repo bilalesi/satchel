@@ -9,16 +9,29 @@ const COLORS = {
 const TILE_COLORS = Object.values(COLORS);
 const tileColor = (s) => TILE_COLORS[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % TILE_COLORS.length];
 
+// Icons are built with DOM calls, not innerHTML, so no string ever becomes markup.
+const SVG_NS = "http://www.w3.org/2000/svg";
 const ICON = {
-  user: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5"/></svg>',
-  key: '<svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l3 3"/></svg>',
-  code: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
-  chev: '<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
-  check: '<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
-  warn: '<svg viewBox="0 0 24 24"><path d="M12 4 3 20h18L12 4Z"/><path d="M12 10v4M12 17h.01"/></svg>',
-  sync: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.3M4 12a8 8 0 0 1 13.7-5.6L20 8.7"/><path d="M4 20v-4.7h4.7M20 4v4.7h-4.7"/></svg>',
-  off: '<svg viewBox="0 0 24 24"><path d="M17.5 18H7a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 17 8.5a4.75 4.75 0 0 1 .5 9.5Z"/><path d="m4 4 16 16"/></svg>',
+  user: [["circle", { cx: 12, cy: 8, r: 4 }], ["path", { d: "M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5" }]],
+  key: [["circle", { cx: 8, cy: 15, r: 4 }], ["path", { d: "m11 12 9-9M16 7l3 3" }]],
+  code: [["circle", { cx: 12, cy: 12, r: 8 }], ["path", { d: "M12 8v4l3 2" }]],
+  chev: [["path", { d: "m9 6 6 6-6 6" }]],
+  check: [["path", { d: "m5 12.5 4.5 4.5L19 7.5" }]],
+  warn: [["path", { d: "M12 4 3 20h18L12 4Z" }], ["path", { d: "M12 10v4M12 17h.01" }]],
+  sync: [["path", { d: "M20 12a8 8 0 0 1-13.7 5.6L4 15.3M4 12a8 8 0 0 1 13.7-5.6L20 8.7" }], ["path", { d: "M4 20v-4.7h4.7M20 4v4.7h-4.7" }]],
+  off: [["path", { d: "M17.5 18H7a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 17 8.5a4.75 4.75 0 0 1 .5 9.5Z" }], ["path", { d: "m4 4 16 16" }]],
 };
+
+function svgIcon(name) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  for (const [tag, attrs] of ICON[name]) {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+    svg.appendChild(el);
+  }
+  return svg;
+}
 
 let info = null;
 let tabHost = "";
@@ -98,21 +111,21 @@ function paintFooter() {
   const sub = $("syncS");
   ico.className = "ico";
   if (s.state === "off") {
-    ico.innerHTML = ICON.off;
+    ico.replaceChildren(svgIcon("off"));
     t.textContent = "Sync is off";
     sub.textContent = "This vault stays on this Mac";
   } else if (s.state === "syncing") {
-    ico.innerHTML = ICON.sync;
+    ico.replaceChildren(svgIcon("sync"));
     t.textContent = "Syncing…";
     sub.textContent = s.backend || "";
   } else if (s.state === "error") {
     ico.className = "ico bad";
-    ico.innerHTML = ICON.warn;
+    ico.replaceChildren(svgIcon("warn"));
     t.textContent = "Sync needs attention";
     sub.textContent = s.error || "Open settings to fix it";
   } else {
     ico.className = "ico ok";
-    ico.innerHTML = ICON.check;
+    ico.replaceChildren(svgIcon("check"));
     t.textContent = "Secure sync";
     sub.textContent = (s.last ? "Last synced " + ago(s.last) : "Waiting for the first sync") + (s.backend ? " · " + s.backend : "");
   }
@@ -127,12 +140,12 @@ function paintFooter() {
   }
 }
 
-function actBtn(icon, label, fn) {
+function actBtn(name, label, fn) {
   const b = document.createElement("button");
   b.className = "act";
   b.title = label;
   b.setAttribute("aria-label", label);
-  b.innerHTML = ICON[icon];
+  b.appendChild(svgIcon(name));
   b.addEventListener("click", (e) => { e.stopPropagation(); fn(); });
   return b;
 }
@@ -181,7 +194,7 @@ function row(it, mode) {
 
   const chev = document.createElement("span");
   chev.className = "chev";
-  chev.innerHTML = ICON.chev;
+  chev.appendChild(svgIcon("chev"));
 
   el.append(tile, txt, acts, chev);
   const go = mode === "site" ? () => fill(it) : () => copy(it.id, "password", "Password copied");
