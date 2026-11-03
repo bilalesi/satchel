@@ -64,6 +64,48 @@ final class WebDAVStoreTests: XCTestCase {
         guard case .notEnforced = lax else { return XCTFail("\(lax)") }
     }
 
+    /// A real server: SATCHEL_WEBDAV_TEST_URL is an existing folder on it, such as http://localhost:8088/dav
+    /// (`bun run test-webdav up` in the website repository starts one; SATCHEL_WEBDAV_TEST_USER and _PASSWORD default
+    /// to its test account). The test makes and removes a folder of its own inside it.
+    func testLiveServer() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let raw = env["SATCHEL_WEBDAV_TEST_URL"], let base = URL(string: raw) else { throw XCTSkip("set SATCHEL_WEBDAV_TEST_URL") }
+        let live = try WebDAVStore(baseURL: base.appendingPathComponent("test-\(UUID().uuidString)"),
+                                   username: env["SATCHEL_WEBDAV_TEST_USER"] ?? "satchel", password: env["SATCHEL_WEBDAV_TEST_PASSWORD"] ?? "satchel-test")
+        try await live.verify() // creates the folder, as setting up sync does
+        let probe = try await live.probeConditionalWrites()
+        XCTAssertEqual(probe, .enforced)
+        let e1 = try await live.put("items/a.vitem", data: Data([1]), ifMatch: nil)
+        do { _ = try await live.put("items/a.vitem", data: Data([2]), ifMatch: nil); XCTFail("create-only must conflict") } catch SyncError.conflict {}
+        do { _ = try await live.put("items/a.vitem", data: Data([2]), ifMatch: "\"stale\""); XCTFail("stale write must conflict") } catch SyncError.conflict {}
+        let e2 = try await live.put("items/a.vitem", data: Data([2]), ifMatch: e1)
+        let got = try await live.get("items/a.vitem")
+        XCTAssertEqual(got?.data, Data([2]))
+        XCTAssertEqual(got?.etag, e2)
+        let listed = try await live.list(prefix: "items/")
+        XCTAssertEqual(Array(listed.keys), ["items/a.vitem"])
+        try await live.delete("items/a.vitem", ifMatch: e2)
+        let gone = try await live.get("items/a.vitem")
+        XCTAssertNil(gone)
+    }
+
+    func testApacheWeakETagRightAfterAWriteIsRetriedOnce() async throws {
+        dav.apacheWeakETags = true
+        WebDAVStore.weakETagWait = .zero
+        defer { WebDAVStore.weakETagWait = .milliseconds(1100) }
+        // The setup check writes and overwrites at once: it must pass on such a server.
+        let probe = try await store.probeConditionalWrites()
+        XCTAssertEqual(probe, .enforced)
+        // A write right after a write succeeds.
+        let e1 = try await store.put("items/a.vitem", data: Data([1]), ifMatch: nil)
+        XCTAssertTrue(e1.hasPrefix("W/"))
+        let e2 = try await store.put("items/a.vitem", data: Data([2]), ifMatch: e1)
+        // A real change by another device is still a conflict, retry or not.
+        dav.seed("items/a.vitem", Data([9]))
+        do { _ = try await store.put("items/a.vitem", data: Data([3]), ifMatch: e2); XCTFail("must conflict") } catch SyncError.conflict {}
+        XCTAssertEqual(dav.data("items/a.vitem"), Data([9]))
+    }
+
     func testVerifyCreatesAMissingFolderOnlyWhenParentExists() async throws {
         try await store.verify() // root dir "" exists in the fake; satchel folder is the root here
     }

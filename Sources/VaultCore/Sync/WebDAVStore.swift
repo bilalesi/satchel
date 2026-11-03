@@ -33,17 +33,22 @@ public final class WebDAVStore: RemoteStore {
     }
 
     public func put(_ path: String, data: Data, ifMatch: String?) async throws -> String {
+        let match = ifMatch.map(Self.strong)
         func attempt() async throws -> HTTPURLResponse {
             var req = request("PUT", path)
             req.httpBody = data
             req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-            if let ifMatch { req.setValue(ifMatch, forHTTPHeaderField: "If-Match") }
+            if let match { req.setValue(match.tag, forHTTPHeaderField: "If-Match") }
             else { req.setValue("*", forHTTPHeaderField: "If-None-Match") }
             return try await http.send(req).1
         }
         var resp = try await attempt()
         if resp.statusCode == 409 { // a parent collection is missing
             try await makeParents(of: path)
+            resp = try await attempt()
+        }
+        if resp.statusCode == 412, match?.wasWeak == true { // see `strong`
+            try await Task.sleep(for: Self.weakETagWait)
             resp = try await attempt()
         }
         switch resp.statusCode {
@@ -82,9 +87,17 @@ public final class WebDAVStore: RemoteStore {
     }
 
     public func delete(_ path: String, ifMatch: String?) async throws {
-        var req = request("DELETE", path)
-        if let ifMatch { req.setValue(ifMatch, forHTTPHeaderField: "If-Match") }
-        let (_, resp) = try await http.send(req)
+        let match = ifMatch.map(Self.strong)
+        func attempt() async throws -> HTTPURLResponse {
+            var req = request("DELETE", path)
+            if let match { req.setValue(match.tag, forHTTPHeaderField: "If-Match") }
+            return try await http.send(req).1
+        }
+        var resp = try await attempt()
+        if resp.statusCode == 412, match?.wasWeak == true {
+            try await Task.sleep(for: Self.weakETagWait)
+            resp = try await attempt()
+        }
         switch resp.statusCode {
         case 200, 202, 204, 404: return
         case 412: throw SyncError.conflict(path)
@@ -107,6 +120,18 @@ public final class WebDAVStore: RemoteStore {
     }
 
     // MARK: Helpers
+
+    /// Apache mod_dav (and the NAS boxes built on it) marks a file's ETag weak, W/"…", for the first second after a
+    /// write, because a second write within that second would get the same tag. A weak tag never passes If-Match
+    /// (RFC 9110 compares strongly), so writing a file again right after writing it is refused once. The tag is sent
+    /// in its strong form and, if the server refuses it while it was weak, the write is tried once more after that
+    /// second. A real change by another device still fails the retry: the tag no longer matches.
+    static func strong(_ etag: String) -> (tag: String, wasWeak: Bool) {
+        etag.hasPrefix("W/") ? (String(etag.dropFirst(2)), true) : (etag, false)
+    }
+
+    /// How long a weak ETag takes to turn strong on Apache (just over one second). Tests set it to zero.
+    nonisolated(unsafe) static var weakETagWait: Duration = .milliseconds(1100)
 
     private static let noETags = SyncError.remote(status: 0, message: "This server does not return ETags, which Satchel needs to sync safely. Pick a different server or another sync method.")
 

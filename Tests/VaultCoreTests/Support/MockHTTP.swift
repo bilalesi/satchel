@@ -49,6 +49,16 @@ final class FakeWebDAV: @unchecked Sendable {
     private var counter = 0
     var omitPutETag = false
     var enforcePreconditions = true
+    /// Like Apache mod_dav: right after a write the ETag is weak (W/"…") and fails If-Match; a moment later
+    /// (here: after one refused If-Match) it is strong again.
+    var apacheWeakETags = false
+    private var weak: Set<String> = []
+    private func shown(_ path: String) -> String? { files[path].map { weak.contains(path) ? "W/" + $0.etag : $0.etag } }
+    /// Strong comparison, as If-Match requires; a weak current tag never matches, then the second passes.
+    private func matches(_ path: String, _ ifMatch: String) -> Bool {
+        if weak.contains(path) { weak.remove(path); return false }
+        return files[path]?.etag == ifMatch
+    }
 
     func install() {
         MockHTTPProtocol.requests = []
@@ -74,22 +84,24 @@ final class FakeWebDAV: @unchecked Sendable {
         switch req.httpMethod ?? "" {
         case "GET", "HEAD":
             guard let f = files[rel] else { return MockResponse(status: 404) }
-            return MockResponse(status: 200, headers: ["ETag": f.etag], body: f.data)
+            return MockResponse(status: 200, headers: ["ETag": shown(rel) ?? f.etag], body: f.data)
         case "PUT":
             let parent = (rel as NSString).deletingLastPathComponent
             guard dirs.contains(parent == "." ? "" : parent) else { return MockResponse(status: 409) }
             let current = files[rel]
             if enforcePreconditions {
                 if ifNone == "*", current != nil { return MockResponse(status: 412) }
-                if let ifMatch, current?.etag != ifMatch { return MockResponse(status: 412) }
+                if let ifMatch, !matches(rel, ifMatch) { return MockResponse(status: 412) }
             }
             let etag = nextETag()
             files[rel] = (body, etag)
-            return MockResponse(status: current == nil ? 201 : 204, headers: omitPutETag ? [:] : ["ETag": etag])
+            if apacheWeakETags { weak.insert(rel) }
+            return MockResponse(status: current == nil ? 201 : 204, headers: omitPutETag ? [:] : ["ETag": shown(rel)!])
         case "DELETE":
             guard let f = files[rel] else { return MockResponse(status: 404) }
-            if enforcePreconditions, let ifMatch, f.etag != ifMatch { return MockResponse(status: 412) }
+            if enforcePreconditions, let ifMatch, !matches(rel, ifMatch) { _ = f; return MockResponse(status: 412) }
             files[rel] = nil
+            weak.remove(rel)
             return MockResponse(status: 204)
         case "MKCOL":
             if dirs.contains(dirKey) { return MockResponse(status: 405) }
@@ -111,7 +123,7 @@ final class FakeWebDAV: @unchecked Sendable {
                 let prefix = dirKey.isEmpty ? "" : dirKey + "/"
                 for (k, f) in files where k.hasPrefix(prefix) && !k.dropFirst(prefix.count).contains("/") {
                     let encoded = k.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? k
-                    entry(root + encoded, etag: f.etag, collection: false)
+                    entry(root + encoded, etag: shown(k) ?? f.etag, collection: false)
                 }
                 for d in dirs where d.hasPrefix(prefix) && d != dirKey && !d.dropFirst(prefix.count).contains("/") {
                     entry(root + d + "/", etag: nil, collection: true)
