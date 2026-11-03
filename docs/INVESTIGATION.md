@@ -258,7 +258,14 @@ Swift has no secure string; `String` copies freely. Rules:
 
 ### 6.3 Piracy / licensing
 
-**Revived by decision 8 (§11, 2026-11-03).** Free for noncommercial use (PolyForm Noncommercial), paid work license for commercial use, sold per person. Design: offline Ed25519-signed license keys verified with an embedded public key, the same shape as the update signature check, never tied to the vault's crypto. The App Store build, if made, unlocks through StoreKit instead. Perfect DRM in a native binary is not achievable and must never be allowed to make the vault unreadable; a failed check may only hide convenience features. Not built yet.
+**Built (decision 9, §11, 2026-11-03; commit dde2655).** Pay once for everyone: Satchel $29 (one person), Family $49 (5 Macs), 14-day trial, one year of updates, the last version from that year kept for good.
+
+- **Keys:** `SATCHEL-<payload>.<signature>`, base64url. Payload `1|<single|family>|<purchase yyyy-MM-dd>|<id>`, Ed25519 over its exact bytes, checked against the public key in `Info.plist` (`SatchelLicensePublicKey`, from `Resources/license-public-key.txt`). Same verify code as update signatures (`UpdateSignature`), its own key pair. Issued with `scripts/license-key.swift`; the private key stays out of the repo. Code: `Sources/VaultCore/Licensing/License.swift`.
+- **Trial:** start date in UserDefaults, outside the vault. Resetting defaults or setting the clock back restarts or extends it; accepted, because perfect DRM in a native binary is not achievable.
+- **After the trial, without a key:** only browser fill (bridge requests other than status, unlock, lock, open) and auto-type pause. Unlock, read, copy, edit and sync keep working. A licence check never touches the vault's keys or files and never makes an item unreadable.
+- **Updates:** a release whose `published_at` is after the licence's update year is offered as "renew" and never downloaded.
+- **Not enforced** in a build without the public key. Before the first paid release: generate the pair and commit the public half.
+- The App Store build, if made, would unlock through StoreKit instead.
 
 ### 6.4 Code-signing boundaries (the part that must be right)
 
@@ -403,7 +410,8 @@ Testing per phase: unit tests for crypto round-trips and AAD tampering (must fai
 | 5 | Import/export | Not answered → **deferred**; manual entry first | KDBX/1PUX import can be added without format changes. |
 | 6 | Reference app for look & feel | **Pulse** by egoist (pulse.egoist.dev) | Visual direction captured in §9.1. |
 | 7 | Name and bundle id | **Satchel**, `com.bilalesi.satchel` (chosen 2026-11-02; built as "Vault" until then, migrated on first launch) | App Group, socket, native messaging host name derive from it. |
-| 8 | Distribution, revised (2026-11-03) | **Public source, free for noncommercial use, paid work license for commercial use.** Direct signed build through Paddle with an offline key first; Mac App Store build (sandboxed, fewer features) later if asked for. GitHub Sponsors enabled (`.github/FUNDING.yml`). | Replaces decision 1. §6.3 licensing is back on the plan. Contributions carry a relicensing grant (CONTRIBUTING.md). Terms in `COMMERCIAL.md`. Teams and developer extras stay future options. |
+| 8 | Distribution, revised (2026-11-03), **replaced by 9** | **Public source, free for noncommercial use, paid work license for commercial use.** Direct signed build through Paddle with an offline key first; Mac App Store build (sandboxed, fewer features) later if asked for. GitHub Sponsors enabled (`.github/FUNDING.yml`). | Replaces decision 1. §6.3 licensing is back on the plan. Contributions carry a relicensing grant (CONTRIBUTING.md). Terms in `COMMERCIAL.md`. Teams and developer extras stay future options. |
+| 9 | Business model (2026-11-03) | **Pay once for everyone:** Satchel $29, Family $49 for 5 Macs, 14-day trial, a year of updates, keep the last version. Public source, all rights reserved (`LICENSE`). | Replaces the free-noncommercial part of decision 8. `COMMERCIAL.md` and GitHub Sponsors removed. Licensing built (§6.3). Payment provider not chosen yet. |
 
 ### 11.1 What "personal use, not in the store" changes
 
@@ -433,6 +441,7 @@ Testing per phase: unit tests for crypto round-trips and AAD tampering (must fai
 | 3 Safari credential provider | waiting for a paid Apple Developer account |
 | KDBX/1PUX import | not started |
 | Product name | Satchel, installed in /Applications on 2026-11-02 |
+| Trial and licence keys (§6.3) | built, covered by tests, checked in the demo copy; not enforced until the licence public key is committed |
 
 ## 12. Sources
 
