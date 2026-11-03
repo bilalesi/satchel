@@ -9,3 +9,6 @@ extension/dist/
 .vscode/
 .claude/
 *.local
+
+# The website is its own private repository (ekhodev/satchel-website), checked out here.
+/website/
