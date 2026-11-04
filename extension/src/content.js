@@ -5,7 +5,15 @@
   const browserAPI = typeof browser !== "undefined" ? browser : chrome;
 
   const PASSWORD_SELECTOR = 'input[type="password"]:not([disabled])';
+  // "Show password" turns the input into type=text (Google: name="Passwd"); it is still the password field.
+  const REVEALED_SELECTOR = 'input[type="text"]:not([disabled]):is([autocomplete*="password"], [name*="pass" i], [id*="pass" i])';
   const USERNAME_SELECTOR = 'input:not([type]), input[type="text"], input[type="email"], input[type="tel"]';
+
+  // The visible password field in scope: a masked one first, else a revealed one.
+  function passwordFieldIn(scope) {
+    return Array.from(scope.querySelectorAll(PASSWORD_SELECTOR)).find(visible)
+      || Array.from(scope.querySelectorAll(REVEALED_SELECTOR)).find(visible) || null;
+  }
 
   let dropdown = null;
   let activeField = null;
@@ -51,8 +59,7 @@
   }
 
   function passwordFieldFor(user) {
-    const scope = user.form || document;
-    return Array.from(scope.querySelectorAll(PASSWORD_SELECTOR)).find(visible) || null;
+    return passwordFieldIn(user.form || document);
   }
 
   // React/Vue track the native setter; dispatching input/change makes frameworks notice.
@@ -69,7 +76,7 @@
   function fillCredential(cred, anchor) {
     // A page that only shows a one-time-code field (second step of a login) gets the code.
     const otp = Array.from(document.querySelectorAll(OTP_SELECTOR)).find(visible) || null;
-    const anyPassword = Array.from(document.querySelectorAll(PASSWORD_SELECTOR)).find(visible) || null;
+    const anyPassword = passwordFieldIn(document);
     if (otp && !anyPassword && cred.totp) { setValue(otp, cred.totp); otp.focus(); return; }
     let pw = anchor && anchor.type === "password" ? anchor : (anchor ? passwordFieldFor(anchor) : null);
     if (!pw) pw = anyPassword;
@@ -309,7 +316,7 @@
       fillCredential(msg.credential, document.activeElement instanceof HTMLInputElement ? document.activeElement : null);
       sendResponse({ ok: true });
     } else if (msg.type === "read-form") {
-      const pw = Array.from(document.querySelectorAll(PASSWORD_SELECTOR)).find(visible);
+      const pw = passwordFieldIn(document);
       const user = pw ? usernameFieldFor(pw) : null;
       sendResponse({ ok: true, username: user ? user.value : "", password: pw ? pw.value : "", title: document.title });
     }
