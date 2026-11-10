@@ -12,18 +12,19 @@ cd "$(dirname "$0")"
 
 pack() {
   ./build.sh >/dev/null
-  local version; version=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' src/manifest.chromium.json)
-  [[ "$version" == $(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' src/manifest.firefox.json) ]] \
-    || { echo "chromium and firefox manifests have different versions" >&2; exit 1; }
+  # Each store has its own version (Firefox may be ahead of Chrome or the reverse).
+  local chrome firefox
+  chrome=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' src/manifest.chromium.json)
+  firefox=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' src/manifest.firefox.json)
   rm -rf store; mkdir -p store
   if [[ ! -f src/.chrome-web-store ]]; then
     grep -v '^  "key": ' dist/chromium/manifest.json > dist/chromium/manifest.tmp && mv dist/chromium/manifest.tmp dist/chromium/manifest.json
   fi
-  (cd dist/chromium && zip -qrX "../../store/satchel-chrome-$version.zip" . -x '.*')
-  (cd dist/firefox && zip -qrX "../../store/satchel-firefox-$version.zip" . -x '.*')
+  (cd dist/chromium && zip -qrX "../../store/satchel-chrome-$chrome.zip" . -x '.*')
+  (cd dist/firefox && zip -qrX "../../store/satchel-firefox-$firefox.zip" . -x '.*')
   ./build.sh >/dev/null  # dist/ back to the unpacked builds, key included
-  echo "store/satchel-chrome-$version.zip  (Chrome Web Store; Edge, Brave, Arc and Dia install from it)"
-  echo "store/satchel-firefox-$version.zip (addons.mozilla.org)"
+  echo "store/satchel-chrome-$chrome.zip  (Chrome Web Store; Edge, Brave, Arc and Dia install from it)"
+  echo "store/satchel-firefox-$firefox.zip (addons.mozilla.org)"
 }
 
 set_chrome_key() {

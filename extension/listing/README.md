@@ -40,8 +40,9 @@ ID never changes again.
 ## 4. Later versions publish themselves
 
 After the first upload to each store, [`extension.yml`](../../.github/workflows/extension.yml) does the rest: a
-push to `main` that changes the `version` in both manifests packs the zips and sends them to the stores, where they
-go through the usual review. A push that leaves the version alone publishes nothing. Both stores refuse a version they
+push to `main` that changes the `version` in `extension/src/manifest.firefox.json` sends that version to Firefox
+Add-ons, and one that changes it in `manifest.chromium.json` sends it to the Chrome Web Store, where they go through
+the usual review. Each store follows its own manifest, so Firefox can be ahead of Chrome. A push that leaves the version alone publishes nothing. Both stores refuse a version they
 already have, so nothing is ever published twice. **Run → Extension** in the Actions tab publishes the current version
 by hand.
 
