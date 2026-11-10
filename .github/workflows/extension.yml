@@ -1,9 +1,9 @@
 name: Extension
 
-# Publishes the browser extension to the Chrome Web Store and Firefox Add-ons when its version changes. The version
-# in extension/src/manifest.*.json is the only publish signal: a push to main that bumps it publishes, any other
-# push to extension/ does nothing here (release.yml still rebuilds the app, which bundles the extension). Both
-# stores refuse a version they already have, so a repeated run fails loudly instead of publishing twice.
+# Publishes the browser extension to Firefox Add-ons and the Chrome Web Store when its version changes. Each store
+# follows its own manifest: a push to main that bumps "version" in extension/src/manifest.firefox.json publishes to
+# Firefox, one that bumps manifest.chromium.json publishes to Chrome. Any other push to extension/ does nothing here
+# (release.yml still rebuilds the app, which bundles the extension). Both stores refuse a version they already have, so a repeated run fails loudly instead of publishing twice.
 # A store whose secrets are not set is skipped with a notice, so the first upload can stay manual
 # (extension/listing/README.md) and the automation starts once the secrets exist.
 on:
@@ -34,34 +34,55 @@ jobs:
           fetch-depth: 0 # the version is compared with the commit before this push
           persist-credentials: false
 
-      - name: Version
+      # Each store follows its own manifest, so Firefox can ship a version Chrome does not have (and the reverse).
+      - name: Versions
         env:
           BEFORE: ${{ github.event.before }}
           FORCED: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           version() { sed -n 's/.*"version": "\([^"]*\)".*/\1/p'; }
-          NOW="$(version < extension/src/manifest.chromium.json)"
-          # A new branch or a force-push has no usable `before`: treat the version as new.
-          if [ "$FORCED" = true ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then WAS=""; else
-            WAS="$( (git show "$BEFORE:extension/src/manifest.chromium.json" 2>/dev/null || true) | version)"
-          fi
-          if [ "$NOW" = "$WAS" ]; then
-            echo "::notice::Extension version is still $NOW: nothing to publish."
-          else
-            echo "PUBLISH=$NOW" >> "$GITHUB_ENV"
-          fi
+          # A new branch or a force-push has no usable `before`: treat every version as new.
+          FRESH=false
+          if [ "$FORCED" = true ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then FRESH=true; fi
+          for store in firefox chromium; do
+            NOW="$(version < "extension/src/manifest.$store.json")"
+            WAS=""
+            [ "$FRESH" = true ] || WAS="$( (git show "$BEFORE:extension/src/manifest.$store.json" 2>/dev/null || true) | version)"
+            if [ "$NOW" = "$WAS" ]; then
+              echo "::notice::$store extension is still $NOW: nothing to publish."
+            else
+              echo "PUBLISH_$(echo "$store" | tr a-z A-Z)=$NOW" >> "$GITHUB_ENV"
+            fi
+          done
 
-      - name: Pack
-        if: env.PUBLISH != ''
+      - name: Install zsh
+        if: env.PUBLISH_FIREFOX != '' || env.PUBLISH_CHROMIUM != ''
+        run: sudo apt-get install -y -qq zsh >/dev/null
+
+      # Signs in with the AMO API keys from https://addons.mozilla.org/developers/addon/api/key/ and submits the
+      # version for listing; a listed add-on is reviewed by Mozilla, so the command does not wait for a signed file.
+      # Firefox then updates installed copies by itself once Mozilla approves the version.
+      - name: Firefox Add-ons
+        if: env.PUBLISH_FIREFOX != ''
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
-          sudo apt-get install -y -qq zsh >/dev/null
-          ./extension/store.sh pack
+          set -euo pipefail
+          if [ -z "$WEB_EXT_API_KEY" ] || [ -z "$WEB_EXT_API_SECRET" ]; then
+            echo "::notice::Firefox Add-ons skipped: AMO_JWT_ISSUER and AMO_JWT_SECRET are not both set."
+            exit 0
+          fi
+          ./extension/build.sh
+          echo "Submitting $PUBLISH_FIREFOX to Firefox Add-ons"
+          npx --yes web-ext@10.8.0 sign --channel listed --approval-timeout 0 \
+            --source-dir extension/dist/firefox --artifacts-dir "$RUNNER_TEMP/web-ext"
 
       # Needs an existing item: the first upload is made by hand in the dashboard (extension/listing/README.md).
       # Credentials: https://github.com/fregante/chrome-webstore-upload-keys
       - name: Chrome Web Store
-        if: env.PUBLISH != ''
+        if: env.PUBLISH_CHROMIUM != ''
         env:
           EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
           CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
@@ -73,21 +94,6 @@ jobs:
             echo "::notice::Chrome Web Store skipped: CWS_EXTENSION_ID, CWS_CLIENT_ID, CWS_CLIENT_SECRET and CWS_REFRESH_TOKEN are not all set."
             exit 0
           fi
+          ./extension/store.sh pack
           # No command = upload, then publish (the store reviews it before it goes live).
-          npx --yes chrome-webstore-upload-cli@4.0.2 --source "extension/store/satchel-chrome-$PUBLISH.zip"
-
-      # Signs in with the AMO API keys from https://addons.mozilla.org/developers/addon/api/key/ and submits the
-      # version for listing; a listed add-on is reviewed by Mozilla, so the command does not wait for a signed file.
-      - name: Firefox Add-ons
-        if: env.PUBLISH != ''
-        env:
-          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
-          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-        run: |
-          set -euo pipefail
-          if [ -z "$WEB_EXT_API_KEY" ] || [ -z "$WEB_EXT_API_SECRET" ]; then
-            echo "::notice::Firefox Add-ons skipped: AMO_JWT_ISSUER and AMO_JWT_SECRET are not both set."
-            exit 0
-          fi
-          npx --yes web-ext@10.8.0 sign --channel listed --approval-timeout 0 \
-            --source-dir extension/dist/firefox --artifacts-dir "$RUNNER_TEMP/web-ext"
+          npx --yes chrome-webstore-upload-cli@4.0.2 --source "extension/store/satchel-chrome-$PUBLISH_CHROMIUM.zip"
